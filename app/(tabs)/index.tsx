@@ -216,21 +216,21 @@ export default function HomeScreen() {
           <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
             <Pressable
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/(tabs)/coach'); }}
-              style={[styles.tipCard, { backgroundColor: colors.card, borderColor: `${coachTip.color}44` }]}
+              style={[styles.tipCard, { backgroundColor: colors.card, borderColor: `${colors.primary}33` }]}
             >
               <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, flex: 1 }}>
-                <View style={[styles.tipIcon, { backgroundColor: `${coachTip.color}20` }]}>
-                  <Ionicons name={coachTip.icon as any} size={18} color={coachTip.color} />
+                <View style={[styles.tipIcon, { backgroundColor: `${colors.primary}15` }]}>
+                  <Ionicons name={coachTip.icon as any} size={18} color={colors.primary} />
                 </View>
                 <View style={{ flex: 1, gap: 4 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={{ color: coachTip.color, fontSize: 10, fontFamily: 'Inter_700Bold', letterSpacing: 1 }}>VYTAL AI INSIGHT</Text>
-                    <Ionicons name="flash" size={10} color={coachTip.color} />
+                    <Text style={{ color: colors.primary, fontSize: 10, fontFamily: 'Inter_700Bold', letterSpacing: 1 }}>VYTAL AI INSIGHT</Text>
+                    <Ionicons name="flash" size={10} color={colors.primary} />
                   </View>
                   <Text style={{ color: colors.foreground, fontSize: 14, fontFamily: 'Inter_400Regular', lineHeight: 20 }}>
                     {coachTip.tip}
                   </Text>
-                  <Text style={{ color: coachTip.color, fontSize: 12, fontFamily: 'Inter_500Medium', marginTop: 2 }}>
+                  <Text style={{ color: colors.primary, fontSize: 12, fontFamily: 'Inter_500Medium', marginTop: 2 }}>
                     Ask VYTAL ai →
                   </Text>
                 </View>

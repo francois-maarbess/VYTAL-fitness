@@ -13,6 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '@clerk/clerk-expo';
 import { useColors } from '@/hooks/useColors';
 import { useUser } from '@/context/UserContext';
 import { ChatBubble } from '@/components/ChatBubble';
@@ -49,6 +50,7 @@ const WELCOME: Message = {
 export default function CoachScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { getToken } = useAuth();
   const { profile, streak, totalWorkouts, setWeeklySchedule, nutritionToday, sleepHours, sleepQuality, stepsToday, readinessScore, tdee, bmr, setSleepHours, setStepsToday, resetNutrition, updateNutrition } = useUser();
 
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
@@ -101,15 +103,20 @@ export default function CoachScreen() {
     let addedAssistant = false;
 
     try {
+      const token = await getToken();
       const response = await fetch(`${getApiBaseUrl()}api/coach/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ messages: chatHistory, userProfile }),
         signal: abortRef.current.signal,
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const body = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status}: ${body.slice(0, 200)}`);
       }
 
       const raw = await response.text();
@@ -222,17 +229,17 @@ export default function CoachScreen() {
           showsVerticalScrollIndicator={false}
         />
 
-        {/* Quick prompts — tiny pills */}
+        {/* Quick prompts — small horizontal pills */}
         {messages.length <= 1 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 16, gap: 6, paddingBottom: 6 }}
+            contentContainerStyle={{ paddingHorizontal: 16, gap: 6, paddingBottom: 4 }}
             style={{ flexShrink: 0 }}
           >
             {QUICK_PROMPTS.map(p => (
               <Pressable key={p} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); handleSend(p); }}
                 style={[styles.promptChip, { backgroundColor: `${colors.primary}12`, borderColor: `${colors.primary}25` }]}
               >
-                <Text style={{ color: colors.primary, fontSize: 11, fontFamily: 'Inter_500Medium' }}>{p}</Text>
+                <Text style={{ color: colors.primary, fontSize: 11, fontFamily: 'Inter_500Medium' }} numberOfLines={1}>{p}</Text>
               </Pressable>
             ))}
           </ScrollView>
