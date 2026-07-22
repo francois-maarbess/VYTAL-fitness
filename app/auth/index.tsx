@@ -127,7 +127,7 @@ export default function AuthScreen() {
           router.replace("/(tabs)");
         }
       } else {
-        const username = email.split("@")[0] + Math.random().toString(36).slice(2, 6);
+        const username = email.split("@")[0].replace(/[^a-zA-Z0-9_-]/g, "") + Math.random().toString(36).slice(2, 6);
         await signUp!.create({ emailAddress: email, password, firstName: name, username });
         await signUp!.prepareEmailAddressVerification({ strategy: "email_code" });
         setPendingVerification(true);
@@ -157,7 +157,7 @@ export default function AuthScreen() {
         console.log("[Auth] missing_requirements — fields needed:", signUp?.missingFields);
         const missing = signUp?.missingFields ?? [];
         // Strategy: try to reload the existing sign-up, then attempt to complete it
-        const fallbackUsername = email.split("@")[0] + Math.random().toString(36).slice(2, 6);
+        const fallbackUsername = email.split("@")[0].replace(/[^a-zA-Z0-9_-]/g, "") + Math.random().toString(36).slice(2, 6);
         for (const attempt of [
           () => signUp!.update({ username: fallbackUsername }),
           () => signUp!.create({ emailAddress: email, password, username: fallbackUsername }),
@@ -235,7 +235,7 @@ export default function AuthScreen() {
     }
     // Try: recreate sign-up to finalize it (Clerk requires username)
     try {
-      const fallbackUsername = email.split("@")[0] + Math.random().toString(36).slice(2, 6);
+      const fallbackUsername = email.split("@")[0].replace(/[^a-zA-Z0-9_-]/g, "") + Math.random().toString(36).slice(2, 6);
       const refreshed = await signUp!.create({ emailAddress: email, password, firstName: name, username: fallbackUsername });
       console.log("[Auth] signUp.create result:", refreshed.status, "sessionId:", refreshed.createdSessionId, "missingFields:", signUp?.missingFields);
       if (refreshed.status === "complete" && refreshed.createdSessionId && setSignUpActive) {

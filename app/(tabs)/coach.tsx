@@ -224,20 +224,22 @@ export default function CoachScreen() {
           showsVerticalScrollIndicator={false}
         />
 
-        {/* Quick prompts — only show when no messages yet */}
+        {/* Quick prompts — small, discrete pills */}
         {messages.length <= 1 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 8 }}
-            style={{ flexShrink: 0 }}
-          >
-            {QUICK_PROMPTS.map(p => (
-              <Pressable key={p} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); handleSend(p); }}
-                style={[styles.promptChip, { backgroundColor: colors.card, borderColor: colors.border }]}
-              >
-                <Text style={{ color: colors.foreground, fontSize: 12, fontFamily: 'Inter_400Regular' }}>{p}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+          <View style={{ paddingHorizontal: 16, gap: 6 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+              {QUICK_PROMPTS.map(p => (
+                <Pressable key={p} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); handleSend(p); }}
+                  style={[styles.promptChip, { backgroundColor: `${colors.primary}12`, borderColor: `${colors.primary}25` }]}
+                >
+                  <Text style={{ color: colors.primary, fontSize: 12, fontFamily: 'Inter_500Medium' }}>{p}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_400Regular', textAlign: 'center' }}>
+              or type your own message
+            </Text>
+          </View>
         )}
 
         {/* Input bar */}
@@ -246,7 +248,7 @@ export default function CoachScreen() {
             ref={inputRef}
             value={input}
             onChangeText={setInput}
-            placeholder="Message VYTAL ai..."
+            placeholder="Ask about training, nutrition, recovery..."
             placeholderTextColor={colors.mutedForeground}
             style={[styles.textInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
             multiline
@@ -274,7 +276,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 17, fontFamily: 'Inter_700Bold' },
   onlineDot: { width: 7, height: 7, borderRadius: 4 },
   planBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginTop: 10, padding: 12, borderRadius: 10, borderWidth: 1 },
-  promptChip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, borderWidth: 1, flexShrink: 0 },
+  promptChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, borderWidth: 1, flexShrink: 0 },
   inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 16, paddingTop: 10, gap: 10, borderTopWidth: 1 },
   textInput: { flex: 1, borderRadius: 22, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15, fontFamily: 'Inter_400Regular', maxHeight: 110 },
   sendBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },

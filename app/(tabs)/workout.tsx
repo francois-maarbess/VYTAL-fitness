@@ -3,7 +3,8 @@ import {
   Alert, FlatList, Modal, Platform, Pressable, ScrollView,
   StyleSheet, Text, TextInput, View,
 } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, FadeInDown } from 'react-native-reanimated';
+import Svg, { Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -246,6 +247,50 @@ function ExerciseLibrary({ visible, onClose }: { visible: boolean; onClose: () =
 
 // ─── Live Workout Session ────────────────────────────────────────────────────
 
+// ─── Workout Summary / Celebration ────────────────────────────────────────────
+
+function WorkoutSummary({ workout, elapsed, completedCount, totalSets, onFinish }: {
+  workout: Workout; elapsed: number; completedCount: number; totalSets: number; onFinish: () => void;
+}) {
+  const colors = useColors();
+  const cal = Math.round(workout.calories * (Math.ceil(elapsed / 60) / workout.duration));
+  const scale = useSharedValue(0);
+  useEffect(() => { scale.value = withSpring(1, { damping: 8, stiffness: 80 }); }, []);
+  const anim = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
+  return (
+    <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', backgroundColor: `${colors.background}E0` }]}>
+      <Animated.View entering={FadeInDown.duration(500).springify()} style={{ alignItems: 'center', gap: 24, paddingHorizontal: 32 }}>
+        <Animated.View style={[{ width: 100, height: 100, borderRadius: 50, backgroundColor: `${colors.primary}20`, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.primary }, anim]}>
+          <Ionicons name="trophy" size={48} color={colors.primary} />
+        </Animated.View>
+        <Text style={{ color: colors.foreground, fontSize: 28, fontFamily: 'Inter_700Bold', textAlign: 'center' }}>Workout Complete!</Text>
+        <View style={{ flexDirection: 'row', gap: 20, flexWrap: 'wrap', justifyContent: 'center' }}>
+          {[
+            { icon: 'time-outline', label: 'Duration', value: `${Math.floor(elapsed / 60).toString().padStart(2, '0')}:${(elapsed % 60).toString().padStart(2, '0')} min` },
+            { icon: 'flame-outline', label: 'Calories', value: `${cal} kcal` },
+            { icon: 'repeat-outline', label: 'Sets', value: `${completedCount}` },
+            { icon: 'barbell-outline', label: 'Exercises', value: `${workout.exercises.length}` },
+          ].map(s => (
+            <View key={s.label} style={{ alignItems: 'center', backgroundColor: colors.card, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 16, minWidth: 80, gap: 6 }}>
+              <Ionicons name={s.icon as any} size={20} color={colors.primary} />
+              <Text style={{ color: colors.foreground, fontSize: 18, fontFamily: 'Inter_700Bold' }}>{s.value}</Text>
+              <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_400Regular' }}>{s.label}</Text>
+            </View>
+          ))}
+        </View>
+        <Pressable onPress={onFinish}
+          style={{ backgroundColor: colors.primary, height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 48, width: '100%' }}
+        >
+          <Text style={{ color: '#000', fontSize: 16, fontFamily: 'Inter_700Bold' }}>Done</Text>
+        </Pressable>
+      </Animated.View>
+    </View>
+  );
+}
+
+// ─── Live Workout Session (Premium) ──────────────────────────────────────────
+
 function WorkoutSession({ workout, onFinish }: { workout: Workout; onFinish: () => void }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -257,9 +302,11 @@ function WorkoutSession({ workout, onFinish }: { workout: Workout; onFinish: () 
   const [elapsed, setElapsed] = useState(0);
   const [restRemaining, setRestRemaining] = useState(0);
   const [isResting, setIsResting] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const restRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const restDuration = useRef(60);
 
   useEffect(() => {
     timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000);
@@ -267,17 +314,27 @@ function WorkoutSession({ workout, onFinish }: { workout: Workout; onFinish: () 
   }, []);
 
   const exercise = workout.exercises[exerciseIdx];
-  if (!exercise) { onFinish(); return null; }
+  if (!exercise && !showSummary) { setShowSummary(true); return null; }
 
   const totalSets = workout.exercises.reduce((s, e) => s + e.sets, 0);
   const progressVal = useSharedValue(0);
   useEffect(() => { progressVal.value = withTiming(totalSets > 0 ? completedCount / totalSets : 0, { duration: 400 }); }, [completedCount]);
   const progressStyle = useAnimatedStyle(() => ({ width: `${progressVal.value * 100}%` as `${number}%` }));
 
+  // Circular rest timer
+  const restProgress = useSharedValue(1);
+  useEffect(() => {
+    if (isResting && restDuration.current > 0) {
+      restProgress.value = withTiming(restRemaining / restDuration.current, { duration: 200 });
+    }
+  }, [restRemaining, isResting]);
+
   function fmt(s: number) { return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`; }
 
   function startRest(secs: number) {
+    restDuration.current = secs;
     setRestRemaining(secs); setIsResting(true);
+    restProgress.value = 1;
     restRef.current = setInterval(() => {
       setRestRemaining(r => {
         if (r <= 1) { if (restRef.current) clearInterval(restRef.current); setIsResting(false); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); return 0; }
@@ -299,16 +356,21 @@ function WorkoutSession({ workout, onFinish }: { workout: Workout; onFinish: () 
   function finishWorkout() {
     if (timerRef.current) clearInterval(timerRef.current);
     if (restRef.current) clearInterval(restRef.current);
+    setIsResting(false);
     const cal = Math.round(workout.calories * (Math.ceil(elapsed / 60) / workout.duration));
     completeWorkout(cal);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    onFinish();
+    setShowSummary(true);
+  }
+
+  if (showSummary) {
+    return <WorkoutSummary workout={workout} elapsed={elapsed} completedCount={completedCount} totalSets={totalSets} onFinish={onFinish} />;
   }
 
   const topPad = Platform.OS === 'web' ? 60 : insets.top;
 
   return (
     <View style={[styles.session, { backgroundColor: colors.background }]}>
+      {/* Header */}
       <View style={[styles.sessionHeader, { paddingTop: topPad + 12, borderBottomColor: colors.border }]}>
         <Pressable onPress={() => Alert.alert('Exit', 'Progress will not be saved.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Exit', style: 'destructive', onPress: onFinish }])}
           style={[styles.exitBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -317,7 +379,7 @@ function WorkoutSession({ workout, onFinish }: { workout: Workout; onFinish: () 
         </Pressable>
         <View style={{ alignItems: 'center' }}>
           <Text style={{ color: colors.mutedForeground, fontSize: 12, fontFamily: 'Inter_500Medium' }}>{workout.name}</Text>
-          <Text style={{ color: colors.primary, fontSize: 28, fontFamily: 'Inter_700Bold', letterSpacing: 1 }}>{fmt(elapsed)}</Text>
+          <Text style={{ color: colors.foreground, fontSize: 30, fontFamily: 'Inter_700Bold', letterSpacing: 0.5, fontVariant: ['tabular-nums'] }}>{fmt(elapsed)}</Text>
         </View>
         <Pressable onPress={() => Alert.alert('Finish Workout', 'Complete this session?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Finish', onPress: finishWorkout }])}
           style={[styles.doneBtn, { backgroundColor: `${colors.primary}20`, borderColor: `${colors.primary}44` }]}
@@ -326,7 +388,8 @@ function WorkoutSession({ workout, onFinish }: { workout: Workout; onFinish: () 
         </Pressable>
       </View>
 
-      <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
+      {/* Progress */}
+      <View style={{ paddingHorizontal: 20, marginTop: 12 }}>
         <View style={[styles.progressBg, { backgroundColor: colors.border }]}>
           <Animated.View style={[styles.progressFill, progressStyle, { backgroundColor: colors.primary }]} />
         </View>
@@ -335,17 +398,22 @@ function WorkoutSession({ workout, onFinish }: { workout: Workout; onFinish: () 
         </Text>
       </View>
 
+      {/* Exercise Display */}
       <View style={{ flex: 1, paddingHorizontal: 20, justifyContent: 'center', gap: 32 }}>
-        <View style={{ alignItems: 'center', gap: 8 }}>
+        <Animated.View key={`${exerciseIdx}-${setIdx}`} entering={FadeInDown.duration(400).springify()} style={{ alignItems: 'center', gap: 8 }}>
           <View style={[styles.muscleBadge, { backgroundColor: `${colors.secondary}20`, borderColor: `${colors.secondary}44` }]}>
             <Text style={{ color: colors.secondary, fontFamily: 'Inter_600SemiBold', fontSize: 11, letterSpacing: 1 }}>
               {exercise.muscleGroup.toUpperCase()}
             </Text>
           </View>
-          <Text style={{ color: colors.foreground, fontSize: 32, fontFamily: 'Inter_700Bold', textAlign: 'center', letterSpacing: -0.5 }}>{exercise.name}</Text>
-        </View>
+          <Text style={{ color: colors.foreground, fontSize: 32, fontFamily: 'Inter_700Bold', textAlign: 'center', letterSpacing: -0.5 }}>
+            {exercise.name}
+          </Text>
 
-        <View style={{ alignItems: 'center' }}>
+        </Animated.View>
+
+        {/* Set / Reps Card */}
+        <Animated.View key={`sets-${exerciseIdx}-${setIdx}`} entering={FadeInDown.duration(400).delay(100).springify()} style={{ alignItems: 'center' }}>
           <View style={[styles.setCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={{ alignItems: 'center', gap: 4 }}>
               <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_600SemiBold', letterSpacing: 1.5 }}>SET</Text>
@@ -359,13 +427,13 @@ function WorkoutSession({ workout, onFinish }: { workout: Workout; onFinish: () 
               <Text style={{ color: colors.primary, fontSize: 36, fontFamily: 'Inter_700Bold', letterSpacing: -1 }}>{exercise.reps}</Text>
             </View>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Exercise dots */}
-        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 5 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6 }}>
           {workout.exercises.map((_, i) => (
             <View key={i} style={{
-              width: i === exerciseIdx ? 20 : 7,
+              width: i === exerciseIdx ? 22 : 7,
               height: 7,
               borderRadius: 4,
               backgroundColor: i < exerciseIdx ? colors.primary : i === exerciseIdx ? colors.secondary : colors.border,
@@ -374,29 +442,42 @@ function WorkoutSession({ workout, onFinish }: { workout: Workout; onFinish: () 
         </View>
       </View>
 
-      {/* Rest overlay */}
+      {/* Rest Overlay — Circular Timer */}
       {isResting && (
         <View style={[StyleSheet.absoluteFill, styles.restOverlay, { backgroundColor: `${colors.background}F0` }]}>
-          <View style={[styles.restCard, { backgroundColor: colors.card, borderColor: `${colors.secondary}55` }]}>
-            <Ionicons name="timer-outline" size={40} color={colors.secondary} />
-            <Text style={{ color: colors.foreground, fontSize: 18, fontFamily: 'Inter_600SemiBold' }}>Rest</Text>
-            <Text style={{ color: colors.secondary, fontSize: 72, fontFamily: 'Inter_700Bold', letterSpacing: -3 }}>{restRemaining}</Text>
-            <Text style={{ color: colors.mutedForeground, fontSize: 13, fontFamily: 'Inter_400Regular' }}>seconds</Text>
+          <Animated.View entering={FadeInDown.duration(300).springify()} style={[styles.restCard, { backgroundColor: colors.card, borderColor: `${colors.secondary}55` }]}>
+            <Svg width={200} height={200} style={{ position: 'absolute', top: -20 }}>
+              <Circle cx={100} cy={100} r={90} stroke={colors.border} strokeWidth={6} fill="none" />
+              <Circle cx={100} cy={100} r={90} stroke={colors.secondary} strokeWidth={6} fill="none"
+                strokeDasharray={`${2 * Math.PI * 90}`}
+                strokeDashoffset={`${2 * Math.PI * 90 * (1 - restRemaining / Math.max(restDuration.current, 1))}`}
+                strokeLinecap="round"
+                transform="rotate(-90 100 100)"
+              />
+            </Svg>
+            <Ionicons name="timer-outline" size={32} color={colors.secondary} />
+            <Text style={{ color: colors.foreground, fontSize: 16, fontFamily: 'Inter_600SemiBold' }}>Rest</Text>
+            <Text style={{ color: colors.secondary, fontSize: 64, fontFamily: 'Inter_700Bold', letterSpacing: -2, fontVariant: ['tabular-nums'] }}>{restRemaining}</Text>
             <Pressable onPress={() => { if (restRef.current) clearInterval(restRef.current); setIsResting(false); }}
-              style={[styles.skipBtn, { backgroundColor: `${colors.secondary}20`, borderColor: `${colors.secondary}44` }]}
+              style={[styles.skipBtn, { backgroundColor: `${colors.secondary}15`, borderColor: `${colors.secondary}33` }]}
             >
-              <Text style={{ color: colors.secondary, fontFamily: 'Inter_600SemiBold', fontSize: 14 }}>Skip Rest →</Text>
+              <Text style={{ color: colors.secondary, fontFamily: 'Inter_600SemiBold', fontSize: 14 }}>Skip →</Text>
             </Pressable>
-          </View>
+          </Animated.View>
         </View>
       )}
 
+      {/* Complete Set Button */}
       {!isResting && (
         <View style={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 24) + 16 }}>
           <Pressable onPress={handleCompleteSet}
-            style={({ pressed }) => [styles.completeBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
+            style={({ pressed }) => [styles.completeBtn, {
+              backgroundColor: colors.primary,
+              opacity: pressed ? 0.85 : 1,
+              transform: [{ scale: pressed ? 0.97 : 1 }],
+            }]}
           >
-            <Ionicons name="checkmark" size={24} color="#000" />
+            <Ionicons name="checkmark-circle" size={22} color="#000" />
             <Text style={{ color: '#000', fontFamily: 'Inter_700Bold', fontSize: 17 }}>Complete Set</Text>
           </Pressable>
         </View>
