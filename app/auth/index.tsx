@@ -16,7 +16,12 @@ function friendlyError(err: unknown): string {
   const msg = (err as Error)?.message ?? "";
   console.log("[Auth] Clerk raw error:", msg);
   if (msg.toLowerCase().includes("already exists") && msg.toLowerCase().includes("email")) return "An account with this email already exists. Try signing in.";
-  if (msg.toLowerCase().includes("does not exist") || msg.toLowerCase().includes("is incorrect")) return "No account found with that email/password";
+  if (
+    msg.toLowerCase().includes("couldn't find") ||
+    msg.toLowerCase().includes("could not find") ||
+    msg.toLowerCase().includes("does not exist") ||
+    msg.toLowerCase().includes("is incorrect")
+  ) return "No account found with that email/password";
   if (msg.toLowerCase().includes("incorrect password")) return "Incorrect password. Try again";
   if (msg.toLowerCase().includes("invalid") && msg.toLowerCase().includes("code")) return "Invalid code. Please try again";
   if (msg.toLowerCase().includes("expired")) return "Code expired. Request a new one";
@@ -136,6 +141,7 @@ export default function AuthScreen() {
 
     try {
       const result = await signUp!.attemptEmailAddressVerification({ code });
+      console.log("[Auth] verify result:", result.status, "sessionId:", result.createdSessionId);
       if (result.status === "complete" && result.createdSessionId && setSignUpActive) {
         await setSignUpActive({ session: result.createdSessionId });
         router.replace("/(tabs)");
@@ -144,6 +150,20 @@ export default function AuthScreen() {
       const msg = (err as Error)?.message ?? "";
       console.log("[Auth] verify error:", msg);
       if (msg.toLowerCase().includes("already been verified")) {
+        // Email already verified — sign in directly with stored credentials
+        console.log("[Auth] already verified, attempting signIn for:", email);
+        try {
+          const signInResult = await signIn!.create({ identifier: email, password });
+          console.log("[Auth] post-verify signIn status:", signInResult.status, "sessionId:", signInResult.createdSessionId);
+          if (signInResult.status === "complete" && signInResult.createdSessionId && setSignInActive) {
+            await setSignInActive({ session: signInResult.createdSessionId });
+            router.replace("/(tabs)");
+            return;
+          }
+        } catch (signInErr) {
+          console.log("[Auth] post-verify signIn failed:", (signInErr as Error)?.message);
+        }
+        // If direct sign-in failed, show the manual sign-in screen
         setVerified(true);
         setError("");
         return;
@@ -172,37 +192,23 @@ export default function AuthScreen() {
     setLoading(true);
     setError("");
     try {
+      // Try using the signUp session if still available
       if (signUp?.createdSessionId && setSignUpActive) {
-        console.log("[Auth] using cached session:", signUp.createdSessionId);
+        console.log("[Auth] using signUp cached session:", signUp.createdSessionId);
         await setSignUpActive({ session: signUp.createdSessionId });
         router.replace("/(tabs)");
         return;
       }
-    } catch (err) {
-      console.log("[Auth] cached session failed:", (err as Error)?.message);
-    }
-    try {
-      const result = await signUp!.create({ emailAddress: email, password, firstName: name });
-      const sessionId = result.createdSessionId ?? signUp?.createdSessionId;
-      if (sessionId && setSignUpActive) {
-        console.log("[Auth] using session from signUp.create:", sessionId);
-        await setSignUpActive({ session: sessionId });
-        router.replace("/(tabs)");
-        return;
-      }
-      console.log("[Auth] signUp.create returned status:", result.status);
-    } catch (err) {
-      console.log("[Auth] signUp.create failed:", (err as Error)?.message);
-    }
-    try {
+      // Sign in with credentials — the account is verified, so this should succeed
+      console.log("[Auth] signIn.create for verified user:", email);
       const result = await signIn!.create({ identifier: email, password });
+      console.log("[Auth] signIn result status:", result.status, "sessionId:", result.createdSessionId);
       if (result.status === "complete" && result.createdSessionId && setSignInActive) {
         await setSignInActive({ session: result.createdSessionId });
         router.replace("/(tabs)");
-        return;
       }
     } catch (err) {
-      console.log("[Auth] signIn.create failed:", (err as Error)?.message);
+      console.log("[Auth] handleVerifiedSignIn error:", (err as Error)?.message);
       setError(friendlyError(err));
     } finally {
       setLoading(false);
