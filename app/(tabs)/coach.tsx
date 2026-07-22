@@ -102,7 +102,10 @@ export default function CoachScreen() {
         signal: abortRef.current.signal,
       });
 
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status}: ${body.slice(0, 200)}`);
+      }
 
       const raw = await response.text();
       let fullContent = '';
@@ -171,7 +174,9 @@ export default function CoachScreen() {
     } catch (err: unknown) {
       if ((err as Error)?.name === 'AbortError') { setIsStreaming(false); setShowTyping(false); return; }
       setShowTyping(false);
-      setMessages(prev => [...prev, { id: uid(), role: 'assistant', content: 'Connection issue — please check your network and try again.' }]);
+      const msg = (err as Error)?.message ?? 'unknown error';
+      console.error("[Auth] coach chat error:", msg);
+      setMessages(prev => [...prev, { id: uid(), role: 'assistant', content: `⚠️ ${msg}. Make sure the API server is running (npm run start:all).` }]);
     } finally {
       setIsStreaming(false);
       setShowTyping(false);
@@ -224,22 +229,20 @@ export default function CoachScreen() {
           showsVerticalScrollIndicator={false}
         />
 
-        {/* Quick prompts — small, discrete pills */}
+        {/* Quick prompts — tiny pills */}
         {messages.length <= 1 && (
-          <View style={{ paddingHorizontal: 16, gap: 6 }}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-              {QUICK_PROMPTS.map(p => (
-                <Pressable key={p} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); handleSend(p); }}
-                  style={[styles.promptChip, { backgroundColor: `${colors.primary}12`, borderColor: `${colors.primary}25` }]}
-                >
-                  <Text style={{ color: colors.primary, fontSize: 12, fontFamily: 'Inter_500Medium' }}>{p}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-            <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_400Regular', textAlign: 'center' }}>
-              or type your own message
-            </Text>
-          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 16, gap: 6, paddingBottom: 4 }}
+            style={{ flexShrink: 0 }}
+          >
+            {QUICK_PROMPTS.map(p => (
+              <Pressable key={p} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); handleSend(p); }}
+                style={[styles.promptChip, { backgroundColor: `${colors.primary}12`, borderColor: `${colors.primary}25` }]}
+              >
+                <Text style={{ color: colors.primary, fontSize: 11, fontFamily: 'Inter_500Medium' }}>{p}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
         )}
 
         {/* Input bar */}
@@ -276,7 +279,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 17, fontFamily: 'Inter_700Bold' },
   onlineDot: { width: 7, height: 7, borderRadius: 4 },
   planBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginTop: 10, padding: 12, borderRadius: 10, borderWidth: 1 },
-  promptChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, borderWidth: 1, flexShrink: 0 },
+  promptChip: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 12, borderWidth: 1, flexShrink: 0 },
   inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 16, paddingTop: 10, gap: 10, borderTopWidth: 1 },
   textInput: { flex: 1, borderRadius: 22, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15, fontFamily: 'Inter_400Regular', maxHeight: 110 },
   sendBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },

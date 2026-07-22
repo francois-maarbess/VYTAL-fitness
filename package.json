@@ -8,8 +8,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web --port 5000",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "start:api": "start-api.bat",
-    "start:all": "concurrently -n expo,api -c cyan,green \"npx expo start --dev-client\" \"start-api.bat\""
+    "start:api": "start \"API\" cmd /c start-api.bat",
+    "start:all": "start \"Expo\" cmd /c \"npx expo start --dev-client\" & start \"API\" cmd /c start-api.bat"
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.19.31",
