@@ -44,10 +44,23 @@ export function stepsToCalories(steps: number, weightKg: number): number {
 
 /** Readiness score 0–100 based on sleep + steps + sleep quality */
 export function calcReadiness(sleepHours: number, steps: number, sleepQuality: 'poor' | 'fair' | 'good' | 'excellent' | null): number {
-  const sleepScore = Math.min(sleepHours / 8, 1) * 55; // 55% weight on duration
+  const sleepScore = Math.min(sleepHours / 8, 1) * 55;
   const qualityBonus = sleepQuality === 'excellent' ? 10 : sleepQuality === 'good' ? 5 : sleepQuality === 'fair' ? -2 : sleepQuality === 'poor' ? -8 : 0;
-  const stepsScore = Math.min(steps / 8000, 1) * 35;   // 35% weight on steps
+  const stepsScore = Math.min(steps / 8000, 1) * 35;
   return Math.max(0, Math.min(100, Math.round(sleepScore + qualityBonus + stepsScore)));
+}
+
+export interface WeightEntry {
+  date: string;
+  weight: number;
+}
+
+export interface DailyNutrition {
+  date: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
 }
 
 export interface UserState {
@@ -69,6 +82,10 @@ export interface UserState {
   showMorningProtocol: boolean;
   morningProtocolCompletedToday: boolean;
   isLoading: boolean;
+  // New fields
+  waterMl: number;
+  weightHistory: WeightEntry[];
+  weeklyNutrition: DailyNutrition[];
 }
 
 interface UserContextType extends UserState {
@@ -88,6 +105,9 @@ interface UserContextType extends UserState {
   resetUser: () => Promise<void>;
   completeMorningProtocol: (hours: number, quality: 'poor' | 'fair' | 'good' | 'excellent' | null) => Promise<void>;
   skipMorningProtocol: () => Promise<void>;
+  addWaterMl: (ml: number) => Promise<void>;
+  setWaterMl: (ml: number) => Promise<void>;
+  logWeight: (weight: number) => Promise<void>;
 }
 
 const defaultNutrition = { calories: 0, protein: 0, carbs: 0, fat: 0 };
@@ -131,6 +151,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     showMorningProtocol: false,
     morningProtocolCompletedToday: false,
     isLoading: true,
+    waterMl: 0,
+    weightHistory: [],
+    weeklyNutrition: [],
   });
 
   const initialized = useRef(false);
@@ -144,12 +167,41 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         if (raw) {
           try {
             const saved = JSON.parse(raw) as Partial<UserState>;
-            // Daily reset: if it's a new day, wipe transient daily fields
             const isNewDay = saved.lastActiveDate !== today;
+
+            // On new day: archive yesterday's nutrition into weeklyNutrition
+            let updatedWeeklyNutrition = saved.weeklyNutrition ?? [];
+            if (isNewDay && saved.nutritionToday && saved.lastActiveDate) {
+              const entry: DailyNutrition = {
+                date: saved.lastActiveDate,
+                ...saved.nutritionToday,
+              };
+              updatedWeeklyNutrition = [entry, ...updatedWeeklyNutrition].slice(0, 7);
+            }
+
             const dailyReset = isNewDay
-              ? { sleepHours: 0, sleepQuality: null as 'poor' | 'fair' | 'good' | 'excellent' | null, stepsToday: 0, nutritionToday: defaultNutrition, workoutCaloriesToday: 0, lastActiveDate: today, showMorningProtocol: true, morningProtocolCompletedToday: false }
+              ? {
+                  sleepHours: 0,
+                  sleepQuality: null as 'poor' | 'fair' | 'good' | 'excellent' | null,
+                  stepsToday: 0,
+                  nutritionToday: defaultNutrition,
+                  workoutCaloriesToday: 0,
+                  waterMl: 0,
+                  lastActiveDate: today,
+                  showMorningProtocol: true,
+                  morningProtocolCompletedToday: false,
+                  weeklyNutrition: updatedWeeklyNutrition,
+                }
               : {};
-            setState((prev) => ({ ...prev, ...saved, ...dailyReset, isLoading: false }));
+            setState((prev) => ({
+              ...prev,
+              ...saved,
+              waterMl: saved.waterMl ?? 0,
+              weightHistory: saved.weightHistory ?? [],
+              weeklyNutrition: saved.weeklyNutrition ?? [],
+              ...dailyReset,
+              isLoading: false,
+            }));
             if (isNewDay) {
               AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ ...saved, ...dailyReset })).catch(() => {});
             }
@@ -237,6 +289,30 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     persist({ nutritionToday: defaultNutrition, workoutCaloriesToday: 0 });
   }, [persist]);
 
+  const addWaterMl = useCallback(async (ml: number) => {
+    setState((prev) => {
+      const updated = { waterMl: Math.min(prev.waterMl + ml, 5000) };
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ ...prev, ...updated })).catch(() => {});
+      return { ...prev, ...updated };
+    });
+  }, []);
+
+  const setWaterMl = useCallback(async (ml: number) => {
+    persist({ waterMl: Math.max(0, Math.min(ml, 5000)) });
+  }, [persist]);
+
+  const logWeight = useCallback(async (weight: number) => {
+    setState((prev) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const existing = prev.weightHistory.filter(e => e.date !== today);
+      const updated = {
+        weightHistory: [{ date: today, weight }, ...existing].slice(0, 30),
+      };
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ ...prev, ...updated })).catch(() => {});
+      return { ...prev, ...updated };
+    });
+  }, []);
+
   const resetUser = useCallback(async () => {
     await AsyncStorage.removeItem(STORAGE_KEY);
     setState({
@@ -258,6 +334,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       showMorningProtocol: false,
       morningProtocolCompletedToday: false,
       isLoading: false,
+      waterMl: 0,
+      weightHistory: [],
+      weeklyNutrition: [],
     });
   }, []);
 
@@ -274,7 +353,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const tdee = state.profile ? calcTDEE(state.profile, state.workoutCaloriesToday + stepsCal) : 0;
   const readinessScore = calcReadiness(state.sleepHours, state.stepsToday, state.sleepQuality);
 
-  // Calorie goal: TDEE adjusted for goal
   const calorieGoal = state.profile
     ? Math.round(
         tdee *
@@ -306,6 +384,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         resetUser,
         completeMorningProtocol,
         skipMorningProtocol,
+        addWaterMl,
+        setWaterMl,
+        logWeight,
       }}
     >
       {children}

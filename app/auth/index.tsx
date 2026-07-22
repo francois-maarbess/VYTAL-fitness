@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, KeyboardAvoidingView, Platform, Pressable,
+  ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
 import { useSignIn, useSignUp, useOAuth } from "@clerk/clerk-expo";
 import { useRouter } from "expo-router";
@@ -10,7 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import OtpInput from "@/components/OtpInput";
 
-type AuthMode = "signIn" | "signUp";
+type AuthMode = "signIn" | "signUp" | "forgotPassword" | "forgotPasswordOtp" | "forgotPasswordNew";
 
 function friendlyError(err: unknown): string {
   const msg = (err as Error)?.message ?? "";
@@ -27,23 +28,24 @@ function friendlyError(err: unknown): string {
   if (msg.toLowerCase().includes("expired")) return "Code expired. Request a new one";
   if (msg.toLowerCase().includes("rate limit") || msg.toLowerCase().includes("rate_limited")) return "Too many attempts. Please wait";
   if (msg.toLowerCase().includes("is not valid")) return "Please enter a valid email address";
+  if (msg.toLowerCase().includes("password") && msg.toLowerCase().includes("pwned")) return "That password is too common. Choose a stronger one";
+  if (msg.toLowerCase().includes("minimum") && msg.toLowerCase().includes("character")) return "Password must be at least 8 characters";
   return msg || "Something went wrong. Please try again";
 }
 
-function TabSwitcher({ mode, onSwitch }: { mode: AuthMode; onSwitch: (m: AuthMode) => void }) {
-  const activeStyle = (tab: AuthMode) => ({
-    backgroundColor: mode === tab ? "#00D4FF" : "transparent",
-    borderRadius: 10,
-  });
-
+function TabSwitcher({ mode, onSwitch }: { mode: "signIn" | "signUp"; onSwitch: (m: "signIn" | "signUp") => void }) {
+  const colors = useColors();
   return (
     <View style={switcherStyles.container}>
-      <Pressable onPress={() => onSwitch("signIn")} style={[switcherStyles.tab, activeStyle("signIn")]}>
-        <Text style={[switcherStyles.tabText, { color: mode === "signIn" ? "#000" : "#fff", opacity: mode === "signIn" ? 1 : 0.5 }]}>Sign In</Text>
-      </Pressable>
-      <Pressable onPress={() => onSwitch("signUp")} style={[switcherStyles.tab, activeStyle("signUp")]}>
-        <Text style={[switcherStyles.tabText, { color: mode === "signUp" ? "#000" : "#fff", opacity: mode === "signUp" ? 1 : 0.5 }]}>Create Account</Text>
-      </Pressable>
+      {(["signIn", "signUp"] as const).map((tab) => (
+        <Pressable key={tab} onPress={() => onSwitch(tab)}
+          style={[switcherStyles.tab, mode === tab && { backgroundColor: colors.primary, borderRadius: 10 }]}
+        >
+          <Text style={[switcherStyles.tabText, { color: mode === tab ? "#000" : "#fff", opacity: mode === tab ? 1 : 0.5 }]}>
+            {tab === "signIn" ? "Sign In" : "Create Account"}
+          </Text>
+        </Pressable>
+      ))}
     </View>
   );
 }
@@ -63,13 +65,16 @@ export default function AuthScreen() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [code, setCode] = useState("");
   const [pendingVerification, setPendingVerification] = useState(false);
   const [verified, setVerified] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [resendTimer, setResendTimer] = useState(0);
+  const [forgotEmailSent, setForgotEmailSent] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval>>();
 
   const { signIn, setActive: setSignInActive, isLoaded: signInLoaded } = useSignIn();
@@ -113,10 +118,10 @@ export default function AuthScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setLoading(true);
     setError("");
-
     try {
       if (mode === "signIn") {
         const result = await signIn!.create({ identifier: email, password });
+        console.log("[Auth] signIn.create status:", result.status, "sessionId:", result.createdSessionId);
         if (result.status === "complete" && result.createdSessionId && setSignInActive) {
           await setSignInActive({ session: result.createdSessionId });
           router.replace("/(tabs)");
@@ -138,7 +143,6 @@ export default function AuthScreen() {
     if (code.length !== 6) return;
     setLoading(true);
     setError("");
-
     try {
       const result = await signUp!.attemptEmailAddressVerification({ code });
       console.log("[Auth] verify result:", result.status, "sessionId:", result.createdSessionId);
@@ -150,8 +154,8 @@ export default function AuthScreen() {
       const msg = (err as Error)?.message ?? "";
       console.log("[Auth] verify error:", msg);
       if (msg.toLowerCase().includes("already been verified")) {
-        // Email already verified — sign in directly with stored credentials
-        console.log("[Auth] already verified, attempting signIn for:", email);
+        // Try direct sign-in since account is already verified
+        console.log("[Auth] already verified — attempting signIn for:", email);
         try {
           const signInResult = await signIn!.create({ identifier: email, password });
           console.log("[Auth] post-verify signIn status:", signInResult.status, "sessionId:", signInResult.createdSessionId);
@@ -163,7 +167,7 @@ export default function AuthScreen() {
         } catch (signInErr) {
           console.log("[Auth] post-verify signIn failed:", (signInErr as Error)?.message);
         }
-        // If direct sign-in failed, show the manual sign-in screen
+        // Fallback: show manual sign-in screen
         setVerified(true);
         setError("");
         return;
@@ -192,14 +196,12 @@ export default function AuthScreen() {
     setLoading(true);
     setError("");
     try {
-      // Try using the signUp session if still available
       if (signUp?.createdSessionId && setSignUpActive) {
         console.log("[Auth] using signUp cached session:", signUp.createdSessionId);
         await setSignUpActive({ session: signUp.createdSessionId });
         router.replace("/(tabs)");
         return;
       }
-      // Sign in with credentials — the account is verified, so this should succeed
       console.log("[Auth] signIn.create for verified user:", email);
       const result = await signIn!.create({ identifier: email, password });
       console.log("[Auth] signIn result status:", result.status, "sessionId:", result.createdSessionId);
@@ -215,142 +217,333 @@ export default function AuthScreen() {
     }
   }
 
-  if (pendingVerification) {
-    if (verified) {
-      return (
-        <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior="padding">
-          <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]} keyboardShouldPersistTaps="handled">
-            <View style={styles.brand}>
-              <View style={[styles.logoCircle, { backgroundColor: colors.muted }]}>
-                <Ionicons name="checkmark-circle" size={36} color={colors.primary} />
-              </View>
-              <Text style={[styles.title, { color: colors.foreground }]}>Email verified</Text>
-              <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-                Your account is ready. Sign in to continue.
-              </Text>
-            </View>
+  // ─── Forgot Password ────────────────────────────────────────────────────────
 
-            {error ? <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}
-
-            <Pressable
-              onPress={handleVerifiedSignIn}
-              disabled={loading}
-              style={[styles.primaryBtn, { backgroundColor: colors.primary, opacity: loading ? 0.5 : 1 }]}
-            >
-              {loading ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>Sign In</Text>}
-            </Pressable>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      );
+  async function handleForgotSendCode() {
+    if (!email.trim()) { setError("Enter your email first"); return; }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setLoading(true);
+    setError("");
+    try {
+      await signIn!.create({ strategy: "reset_password_email_code", identifier: email });
+      console.log("[Auth] reset password email sent to:", email);
+      setMode("forgotPasswordOtp");
+      setCode("");
+      startResendTimer();
+    } catch (err) {
+      console.log("[Auth] forgotPassword error:", (err as Error)?.message);
+      setError(friendlyError(err));
+    } finally {
+      setLoading(false);
     }
+  }
 
+  async function handleForgotVerifyCode() {
+    if (code.length !== 6) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setLoading(true);
+    setError("");
+    try {
+      const result = await signIn!.attemptFirstFactor({ strategy: "reset_password_email_code", code });
+      console.log("[Auth] forgotPassword verify status:", result.status);
+      if (result.status === "needs_new_password") {
+        setMode("forgotPasswordNew");
+      } else {
+        setError("Unexpected response. Please try again.");
+      }
+    } catch (err) {
+      console.log("[Auth] forgotPassword verify error:", (err as Error)?.message);
+      setError(friendlyError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleForgotSetNewPassword() {
+    if (!newPassword.trim() || newPassword.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setLoading(true);
+    setError("");
+    try {
+      const result = await signIn!.resetPassword({ password: newPassword });
+      console.log("[Auth] resetPassword status:", result.status, "sessionId:", result.createdSessionId);
+      if (result.status === "complete" && result.createdSessionId && setSignInActive) {
+        await setSignInActive({ session: result.createdSessionId });
+        router.replace("/(tabs)");
+      }
+    } catch (err) {
+      console.log("[Auth] resetPassword error:", (err as Error)?.message);
+      setError(friendlyError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ─── Verified screen ────────────────────────────────────────────────────────
+
+  if (pendingVerification && verified) {
     return (
       <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior="padding">
         <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]} keyboardShouldPersistTaps="handled">
           <View style={styles.brand}>
-            <View style={[styles.logoCircle, { backgroundColor: colors.muted }]}>
-              <Ionicons name="flash" size={28} color={colors.primary} />
+            <View style={[styles.logoCircle, { backgroundColor: `${colors.primary}20` }]}>
+              <Ionicons name="checkmark-circle" size={36} color={colors.primary} />
             </View>
-            <Text style={[styles.title, { color: colors.foreground }]}>Check your email</Text>
+            <Text style={[styles.title, { color: colors.foreground }]}>Email verified</Text>
             <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-              We sent a 6-digit code to{"\n"}{email}
+              Your account is ready. Sign in to continue.
             </Text>
           </View>
-
-          <OtpInput value={code} onChange={setCode} onComplete={(c) => { setCode(c); handleVerify(); }} />
-
           {error ? <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}
-
-          <Pressable
-            onPress={handleVerify}
-            disabled={loading || code.length !== 6}
-            style={[styles.primaryBtn, { backgroundColor: colors.primary, opacity: loading || code.length !== 6 ? 0.5 : 1 }]}
+          <Pressable onPress={handleVerifiedSignIn} disabled={loading}
+            style={[styles.primaryBtn, { backgroundColor: colors.primary, opacity: loading ? 0.5 : 1 }]}
           >
-            {loading ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>Verify Email</Text>}
-          </Pressable>
-
-          <Pressable onPress={handleResend} disabled={resendTimer > 0} style={styles.resendBtn}>
-            <Text style={[styles.resendText, { color: resendTimer > 0 ? colors.mutedForeground : colors.primary }]}>
-              {resendTimer > 0 ? `Resend code in ${resendTimer}s` : "Resend code"}
-            </Text>
-          </Pressable>
-
-          <Pressable onPress={() => { setPendingVerification(false); setMode("signIn"); setError(""); setVerified(false); }}>
-            <Text style={[styles.switchText, { color: colors.mutedForeground }]}>Back to sign in</Text>
+            {loading ? <ActivityIndicator color="#000" /> : <Text style={[styles.primaryBtnText, { color: "#000" }]}>Sign In</Text>}
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
     );
   }
 
+  // ─── OTP verification screen ────────────────────────────────────────────────
+
+  if (pendingVerification) {
+    return (
+      <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior="padding">
+        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]} keyboardShouldPersistTaps="handled">
+          <View style={styles.brand}>
+            <View style={[styles.logoCircle, { backgroundColor: `${colors.primary}20` }]}>
+              <Ionicons name="mail-unread-outline" size={28} color={colors.primary} />
+            </View>
+            <Text style={[styles.title, { color: colors.foreground }]}>Check your email</Text>
+            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
+              We sent a 6-digit code to{"\n"}{email}
+            </Text>
+          </View>
+          <OtpInput value={code} onChange={setCode} onComplete={(c) => { setCode(c); handleVerify(); }} />
+          {error ? <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}
+          <Pressable onPress={handleVerify} disabled={loading || code.length !== 6}
+            style={[styles.primaryBtn, { backgroundColor: colors.primary, opacity: loading || code.length !== 6 ? 0.5 : 1 }]}
+          >
+            {loading ? <ActivityIndicator color="#000" /> : <Text style={[styles.primaryBtnText, { color: "#000" }]}>Verify Email</Text>}
+          </Pressable>
+          <Pressable onPress={handleResend} disabled={resendTimer > 0} style={styles.resendBtn}>
+            <Text style={[styles.resendText, { color: resendTimer > 0 ? colors.mutedForeground : colors.primary }]}>
+              {resendTimer > 0 ? `Resend in ${resendTimer}s` : "Resend code"}
+            </Text>
+          </Pressable>
+          <Pressable onPress={() => { setPendingVerification(false); setMode("signIn"); setError(""); setVerified(false); }}>
+            <Text style={[styles.switchText, { color: colors.mutedForeground }]}>← Back to sign in</Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // ─── Forgot Password — Step 1: enter email ──────────────────────────────────
+
+  if (mode === "forgotPassword") {
+    return (
+      <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior="padding">
+        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]} keyboardShouldPersistTaps="handled">
+          <View style={styles.brand}>
+            <View style={[styles.logoCircle, { backgroundColor: `${colors.accent}20` }]}>
+              <Ionicons name="key-outline" size={28} color={colors.accent} />
+            </View>
+            <Text style={[styles.title, { color: colors.foreground }]}>Reset Password</Text>
+            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
+              Enter your email and we'll send a reset code
+            </Text>
+          </View>
+          <View style={{ gap: 12 }}>
+            <View style={[styles.inputWrapper, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+              <Ionicons name="mail-outline" size={18} color={colors.mutedForeground} style={styles.inputIcon} />
+              <TextInput
+                value={email} onChangeText={setEmail}
+                placeholder="Email"
+                placeholderTextColor={colors.mutedForeground}
+                style={[styles.input, { color: colors.foreground }]}
+                autoCapitalize="none" keyboardType="email-address" autoFocus
+              />
+            </View>
+            {error ? <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}
+            <Pressable onPress={handleForgotSendCode} disabled={loading || !email.trim()}
+              style={[styles.primaryBtn, { backgroundColor: colors.accent, opacity: loading || !email.trim() ? 0.5 : 1 }]}
+            >
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={[styles.primaryBtnText, { color: "#fff" }]}>Send Reset Code</Text>}
+            </Pressable>
+          </View>
+          <Pressable onPress={() => { setMode("signIn"); setError(""); }}>
+            <Text style={[styles.switchText, { color: colors.mutedForeground }]}>← Back to sign in</Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // ─── Forgot Password — Step 2: enter OTP ────────────────────────────────────
+
+  if (mode === "forgotPasswordOtp") {
+    return (
+      <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior="padding">
+        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]} keyboardShouldPersistTaps="handled">
+          <View style={styles.brand}>
+            <View style={[styles.logoCircle, { backgroundColor: `${colors.accent}20` }]}>
+              <Ionicons name="shield-checkmark-outline" size={28} color={colors.accent} />
+            </View>
+            <Text style={[styles.title, { color: colors.foreground }]}>Enter Reset Code</Text>
+            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
+              Sent to {email}
+            </Text>
+          </View>
+          <OtpInput value={code} onChange={setCode} onComplete={(c) => { setCode(c); handleForgotVerifyCode(); }} />
+          {error ? <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}
+          <Pressable onPress={handleForgotVerifyCode} disabled={loading || code.length !== 6}
+            style={[styles.primaryBtn, { backgroundColor: colors.accent, opacity: loading || code.length !== 6 ? 0.5 : 1 }]}
+          >
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={[styles.primaryBtnText, { color: "#fff" }]}>Continue</Text>}
+          </Pressable>
+          <Pressable onPress={() => { setMode("forgotPassword"); setError(""); setCode(""); }}>
+            <Text style={[styles.switchText, { color: colors.mutedForeground }]}>← Change email</Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // ─── Forgot Password — Step 3: new password ─────────────────────────────────
+
+  if (mode === "forgotPasswordNew") {
+    return (
+      <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior="padding">
+        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]} keyboardShouldPersistTaps="handled">
+          <View style={styles.brand}>
+            <View style={[styles.logoCircle, { backgroundColor: `${colors.primary}20` }]}>
+              <Ionicons name="lock-open-outline" size={28} color={colors.primary} />
+            </View>
+            <Text style={[styles.title, { color: colors.foreground }]}>New Password</Text>
+            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
+              Choose a strong password (min 8 characters)
+            </Text>
+          </View>
+          <View style={{ gap: 12 }}>
+            <View style={[styles.inputWrapper, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+              <Ionicons name="lock-closed-outline" size={18} color={colors.mutedForeground} style={styles.inputIcon} />
+              <TextInput
+                value={newPassword} onChangeText={setNewPassword}
+                placeholder="New password"
+                placeholderTextColor={colors.mutedForeground}
+                style={[styles.input, { color: colors.foreground }]}
+                secureTextEntry={!showNewPassword} autoCapitalize="none" autoFocus
+              />
+              <Pressable onPress={() => setShowNewPassword(!showNewPassword)} style={styles.inputIconRight}>
+                <Ionicons name={showNewPassword ? "eye-off-outline" : "eye-outline"} size={18} color={colors.mutedForeground} />
+              </Pressable>
+            </View>
+            {/* Strength indicator */}
+            {newPassword.length > 0 && (
+              <View style={{ gap: 4 }}>
+                <View style={{ flexDirection: 'row', gap: 4 }}>
+                  {[1,2,3,4].map(i => {
+                    const strength = newPassword.length >= 12 && /[A-Z]/.test(newPassword) && /[0-9]/.test(newPassword) && /[^A-Za-z0-9]/.test(newPassword) ? 4
+                      : newPassword.length >= 10 && /[A-Z]/.test(newPassword) ? 3
+                      : newPassword.length >= 8 ? 2 : 1;
+                    const bar = i <= strength;
+                    const color = strength === 4 ? colors.primary : strength === 3 ? '#00B894' : strength === 2 ? '#FFB800' : colors.destructive;
+                    return <View key={i} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: bar ? color : colors.border }} />;
+                  })}
+                </View>
+                <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_400Regular' }}>
+                  {newPassword.length >= 12 && /[^A-Za-z0-9]/.test(newPassword) ? 'Strong password' : newPassword.length >= 8 ? 'Good — add symbols & uppercase for stronger' : 'Too short'}
+                </Text>
+              </View>
+            )}
+            {error ? <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}
+            <Pressable onPress={handleForgotSetNewPassword} disabled={loading || newPassword.length < 8}
+              style={[styles.primaryBtn, { backgroundColor: colors.primary, opacity: loading || newPassword.length < 8 ? 0.5 : 1 }]}
+            >
+              {loading ? <ActivityIndicator color="#000" /> : <Text style={[styles.primaryBtnText, { color: "#000" }]}>Set New Password</Text>}
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // ─── Main sign in / sign up ──────────────────────────────────────────────────
+
+  const isSignIn = mode === "signIn";
+
   return (
     <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior="padding">
       <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]} keyboardShouldPersistTaps="handled">
         <View style={styles.brand}>
-          <View style={[styles.logoCircle, { backgroundColor: colors.muted }]}>
+          <View style={[styles.logoCircle, { backgroundColor: `${colors.primary}15`, borderWidth: 1, borderColor: `${colors.primary}33` }]}>
             <Ionicons name="flash" size={28} color={colors.primary} />
           </View>
           <Text style={[styles.title, { color: colors.foreground }]}>VYTAL</Text>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>AI Fitness & Longevity</Text>
         </View>
 
-        <TabSwitcher mode={mode} onSwitch={(m) => { setMode(m); setError(""); }} />
+        <TabSwitcher mode={isSignIn ? "signIn" : "signUp"} onSwitch={(m) => { setMode(m); setError(""); }} />
 
         <View style={[styles.form, { marginTop: 24 }]}>
-          {mode === "signUp" && (
+          {!isSignIn && (
             <View style={[styles.inputWrapper, { backgroundColor: colors.muted, borderColor: colors.border }]}>
               <Ionicons name="person-outline" size={18} color={colors.mutedForeground} style={styles.inputIcon} />
-              <TextInput
-                value={name}
-                onChangeText={setName}
-                placeholder="Full Name"
+              <TextInput value={name} onChangeText={setName} placeholder="Full Name"
                 placeholderTextColor={colors.mutedForeground}
                 style={[styles.input, { color: colors.foreground }]}
-                autoCapitalize="words"
-                autoComplete="name"
+                autoCapitalize="words" autoComplete="name"
               />
             </View>
           )}
 
           <View style={[styles.inputWrapper, { backgroundColor: colors.muted, borderColor: colors.border }]}>
             <Ionicons name="mail-outline" size={18} color={colors.mutedForeground} style={styles.inputIcon} />
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Email"
+            <TextInput value={email} onChangeText={setEmail} placeholder="Email"
               placeholderTextColor={colors.mutedForeground}
               style={[styles.input, { color: colors.foreground }]}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              autoComplete="email"
+              autoCapitalize="none" keyboardType="email-address" autoComplete="email"
             />
           </View>
 
           <View style={[styles.inputWrapper, { backgroundColor: colors.muted, borderColor: colors.border }]}>
             <Ionicons name="lock-closed-outline" size={18} color={colors.mutedForeground} style={styles.inputIcon} />
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Password"
+            <TextInput value={password} onChangeText={setPassword} placeholder="Password"
               placeholderTextColor={colors.mutedForeground}
               style={[styles.input, { color: colors.foreground }]}
-              secureTextEntry={!showPassword}
-              autoCapitalize="none"
-              autoComplete={mode === "signUp" ? "new-password" : "password"}
+              secureTextEntry={!showPassword} autoCapitalize="none"
+              autoComplete={isSignIn ? "password" : "new-password"}
             />
             <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.inputIconRight}>
               <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={18} color={colors.mutedForeground} />
             </Pressable>
           </View>
 
+          {isSignIn && (
+            <Pressable onPress={() => { setMode("forgotPassword"); setError(""); }} style={{ alignSelf: "flex-end" }}>
+              <Text style={{ color: colors.primary, fontSize: 13, fontFamily: "Inter_500Medium" }}>Forgot password?</Text>
+            </Pressable>
+          )}
+
           {error ? <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}
 
           <Pressable
             onPress={handleEmailAuth}
-            disabled={loading || !email.trim() || !password.trim() || (mode === "signUp" && !name.trim())}
-            style={[styles.primaryBtn, { backgroundColor: colors.primary, opacity: loading || !email.trim() || !password.trim() || (mode === "signUp" && !name.trim()) ? 0.5 : 1 }]}
+            disabled={loading || !email.trim() || !password.trim() || (!isSignIn && !name.trim())}
+            style={[styles.primaryBtn, {
+              backgroundColor: colors.primary,
+              opacity: loading || !email.trim() || !password.trim() || (!isSignIn && !name.trim()) ? 0.5 : 1,
+            }]}
           >
-            {loading ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>{mode === "signIn" ? "Sign In" : "Create Account"}</Text>}
+            {loading
+              ? <ActivityIndicator color="#000" />
+              : <Text style={[styles.primaryBtnText, { color: "#000" }]}>{isSignIn ? "Sign In" : "Create Account"}</Text>
+            }
           </Pressable>
 
           <View style={styles.divider}>
@@ -376,21 +569,21 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: 40 },
-  brand: { alignItems: "center", marginBottom: 32 },
-  logoCircle: { width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center", marginBottom: 12 },
-  title: { fontSize: 32, fontFamily: "Inter_700Bold", letterSpacing: -0.5 },
-  subtitle: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: 4, textAlign: "center" },
+  brand: { alignItems: "center", marginBottom: 32, gap: 6 },
+  logoCircle: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", marginBottom: 8 },
+  title: { fontSize: 34, fontFamily: "Inter_700Bold", letterSpacing: -1 },
+  subtitle: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center" },
   form: { gap: 12 },
-  inputWrapper: { height: 50, borderRadius: 12, borderWidth: 1, flexDirection: "row", alignItems: "center", paddingHorizontal: 14 },
+  inputWrapper: { height: 52, borderRadius: 14, borderWidth: 1, flexDirection: "row", alignItems: "center", paddingHorizontal: 14 },
   inputIcon: { marginRight: 10 },
-  inputIconRight: { marginLeft: 10 },
+  inputIconRight: { marginLeft: 10, padding: 2 },
   input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
-  primaryBtn: { height: 50, borderRadius: 12, alignItems: "center", justifyContent: "center", marginTop: 4 },
-  primaryBtnText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  primaryBtn: { height: 52, borderRadius: 14, alignItems: "center", justifyContent: "center", marginTop: 4 },
+  primaryBtnText: { fontSize: 16, fontFamily: "Inter_700Bold" },
   divider: { flexDirection: "row", alignItems: "center", gap: 12, marginVertical: 8 },
   dividerLine: { flex: 1, height: 1 },
   dividerText: { fontSize: 13, fontFamily: "Inter_400Regular" },
-  socialBtn: { height: 50, borderRadius: 12, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
+  socialBtn: { height: 52, borderRadius: 14, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
   socialBtnText: { fontSize: 15, fontFamily: "Inter_500Medium" },
   switchText: { fontSize: 14, fontFamily: "Inter_500Medium", textAlign: "center", marginTop: 16 },
   error: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center" },
