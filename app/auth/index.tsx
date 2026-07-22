@@ -127,7 +127,8 @@ export default function AuthScreen() {
           router.replace("/(tabs)");
         }
       } else {
-        await signUp!.create({ emailAddress: email, password, firstName: name });
+        const username = email.split("@")[0] + Math.random().toString(36).slice(2, 6);
+        await signUp!.create({ emailAddress: email, password, firstName: name, username });
         await signUp!.prepareEmailAddressVerification({ strategy: "email_code" });
         setPendingVerification(true);
         startResendTimer();
@@ -156,10 +157,11 @@ export default function AuthScreen() {
         console.log("[Auth] missing_requirements — fields needed:", signUp?.missingFields);
         const missing = signUp?.missingFields ?? [];
         // Strategy: try to reload the existing sign-up, then attempt to complete it
+        const fallbackUsername = email.split("@")[0] + Math.random().toString(36).slice(2, 6);
         for (const attempt of [
-          () => signUp!.update({}),
-          () => signUp!.create({ emailAddress: email, password }),
-          () => signUp!.create({ emailAddress: email, password, firstName: name }),
+          () => signUp!.update({ username: fallbackUsername }),
+          () => signUp!.create({ emailAddress: email, password, username: fallbackUsername }),
+          () => signUp!.create({ emailAddress: email, password, firstName: name, username: fallbackUsername }),
         ]) {
           try {
             const res = await attempt();
@@ -231,9 +233,10 @@ export default function AuthScreen() {
     } catch (err) {
       console.log("[Auth] cached session failed:", (err as Error)?.message);
     }
-    // Try: recreate sign-up to finalize it
+    // Try: recreate sign-up to finalize it (Clerk requires username)
     try {
-      const refreshed = await signUp!.create({ emailAddress: email, password, firstName: name });
+      const fallbackUsername = email.split("@")[0] + Math.random().toString(36).slice(2, 6);
+      const refreshed = await signUp!.create({ emailAddress: email, password, firstName: name, username: fallbackUsername });
       console.log("[Auth] signUp.create result:", refreshed.status, "sessionId:", refreshed.createdSessionId, "missingFields:", signUp?.missingFields);
       if (refreshed.status === "complete" && refreshed.createdSessionId && setSignUpActive) {
         await setSignUpActive({ session: refreshed.createdSessionId });
@@ -241,7 +244,7 @@ export default function AuthScreen() {
         return;
       }
       if (refreshed.status === "missing_requirements") {
-        const updated = await signUp!.update({});
+        const updated = await signUp!.update({ username: fallbackUsername });
         console.log("[Auth] signUp.update result:", updated.status, "sessionId:", updated.createdSessionId);
         if (updated.status === "complete" && updated.createdSessionId && setSignUpActive) {
           await setSignUpActive({ session: updated.createdSessionId });
