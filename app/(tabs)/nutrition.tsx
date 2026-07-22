@@ -96,7 +96,7 @@ function NLPModal({ visible, onClose, onConfirm, getToken }: {
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior="padding">
+      <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Pressable style={{ flex: 1 }} onPress={handleClose} />
         <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={{ alignItems: 'center', marginBottom: 16 }}>

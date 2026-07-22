@@ -12,13 +12,13 @@ import { useColors } from "@/hooks/useColors";
 
 interface LeaderboardEntry {
   rank: number;
-  userId: string;
+  userId?: string;
   name: string;
   avatar: string;
   fitScore: number;
   streak: number;
   isCurrentUser: boolean;
-  rankDelta: number;
+  rankDelta?: number;
 }
 
 interface Props {
@@ -58,8 +58,9 @@ export function LeaderboardRow({ entry }: Props) {
     elevation: isCurrent ? 4 : 0,
   }));
 
-  const deltaIcon = entry.rankDelta > 0 ? "arrow-up" : entry.rankDelta < 0 ? "arrow-down" : "remove";
-  const deltaColor = entry.rankDelta > 0 ? "#22C55E" : entry.rankDelta < 0 ? "#EF4444" : colors.mutedForeground;
+  const rankDelta = entry.rankDelta ?? 0;
+  const deltaIcon = rankDelta > 0 ? "arrow-up" : rankDelta < 0 ? "arrow-down" : "remove";
+  const deltaColor = rankDelta > 0 ? "#22C55E" : rankDelta < 0 ? "#EF4444" : colors.mutedForeground;
 
   return (
     <Animated.View
@@ -126,7 +127,7 @@ export function LeaderboardRow({ entry }: Props) {
         <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
           <Ionicons name={deltaIcon as any} size={11} color={deltaColor} />
           <Text style={{ color: deltaColor, fontSize: 10, fontFamily: "Inter_600SemiBold" }}>
-            {entry.rankDelta !== 0 ? Math.abs(entry.rankDelta) : "—"}
+            {rankDelta !== 0 ? Math.abs(rankDelta) : "—"}
           </Text>
         </View>
       </View>

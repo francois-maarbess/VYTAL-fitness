@@ -15,11 +15,11 @@ export default function SSOCallback() {
     const handleSSOCallback = async () => {
       try {
         if (params.type === "signup") {
-          const result = await setSignUpActive({ session: params.session });
-          if (result) router.replace("/(tabs)");
+          await setSignUpActive({ session: params.session });
+          router.replace("/(tabs)");
         } else {
-          const result = await setSignInActive({ session: params.session });
-          if (result) router.replace("/(tabs)");
+          await setSignInActive({ session: params.session });
+          router.replace("/(tabs)");
         }
       } catch {
         router.replace("/auth");

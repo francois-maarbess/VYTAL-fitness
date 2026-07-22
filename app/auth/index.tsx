@@ -75,7 +75,7 @@ export default function AuthScreen() {
   const [error, setError] = useState("");
   const [resendTimer, setResendTimer] = useState(0);
   const [forgotEmailSent, setForgotEmailSent] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval>>();
+  const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   const { signIn, setActive: setSignInActive, isLoaded: signInLoaded } = useSignIn();
   const { signUp, setActive: setSignUpActive, isLoaded: signUpLoaded } = useSignUp();
@@ -286,7 +286,7 @@ export default function AuthScreen() {
 
   if (pendingVerification && verified) {
     return (
-      <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior="padding">
+      <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]} keyboardShouldPersistTaps="handled">
           <View style={styles.brand}>
             <View style={[styles.logoCircle, { backgroundColor: `${colors.primary}20` }]}>
@@ -312,7 +312,7 @@ export default function AuthScreen() {
 
   if (pendingVerification) {
     return (
-      <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior="padding">
+      <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]} keyboardShouldPersistTaps="handled">
           <View style={styles.brand}>
             <View style={[styles.logoCircle, { backgroundColor: `${colors.primary}20` }]}>
@@ -347,7 +347,7 @@ export default function AuthScreen() {
 
   if (mode === "forgotPassword") {
     return (
-      <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior="padding">
+      <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]} keyboardShouldPersistTaps="handled">
           <View style={styles.brand}>
             <View style={[styles.logoCircle, { backgroundColor: `${colors.accent}20` }]}>
@@ -388,7 +388,7 @@ export default function AuthScreen() {
 
   if (mode === "forgotPasswordOtp") {
     return (
-      <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior="padding">
+      <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]} keyboardShouldPersistTaps="handled">
           <View style={styles.brand}>
             <View style={[styles.logoCircle, { backgroundColor: `${colors.accent}20` }]}>
@@ -418,7 +418,7 @@ export default function AuthScreen() {
 
   if (mode === "forgotPasswordNew") {
     return (
-      <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior="padding">
+      <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]} keyboardShouldPersistTaps="handled">
           <View style={styles.brand}>
             <View style={[styles.logoCircle, { backgroundColor: `${colors.primary}20` }]}>
@@ -478,7 +478,7 @@ export default function AuthScreen() {
   const isSignIn = mode === "signIn";
 
   return (
-    <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior="padding">
+    <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]} keyboardShouldPersistTaps="handled">
         <View style={styles.brand}>
           <View style={[styles.logoCircle, { backgroundColor: `${colors.primary}15`, borderWidth: 1, borderColor: `${colors.primary}33` }]}>
