@@ -145,12 +145,6 @@ export default function HomeScreen() {
     skipMorningProtocol();
   }, [skipMorningProtocol]);
 
-  useEffect(() => {
-    if (!isLoading && (!profile || !profile.onboardingComplete)) {
-      router.replace('/onboarding');
-    }
-  }, [isLoading, profile]);
-
   if (isLoading) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}>
@@ -158,7 +152,7 @@ export default function HomeScreen() {
       </View>
     );
   }
-  if (!profile?.onboardingComplete) return null;
+  if (!profile) return null;
 
   const now = new Date();
   const todayWorkout = WORKOUTS[now.getDay() % WORKOUTS.length];

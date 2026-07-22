@@ -145,16 +145,43 @@ export default function AuthScreen() {
     setError("");
     try {
       const result = await signUp!.attemptEmailAddressVerification({ code });
-      console.log("[Auth] verify result:", result.status, "sessionId:", result.createdSessionId);
+      console.log("[Auth] verify result:", result.status, "sessionId:", result.createdSessionId, "missingFields:", signUp?.missingFields);
       if (result.status === "complete" && result.createdSessionId && setSignUpActive) {
         await setSignUpActive({ session: result.createdSessionId });
         router.replace("/(tabs)");
+        return;
+      }
+      // missing_requirements means Clerk accepted the code but needs more data
+      if (result.status === "missing_requirements") {
+        console.log("[Auth] missing_requirements — fields needed:", signUp?.missingFields);
+        // Try to complete the sign-up by re-creating it (Clerk returns the existing one)
+        const refreshed = await signUp!.create({ emailAddress: email, password, firstName: name });
+        console.log("[Auth] signUp.create after missing_requirements:", refreshed.status, "sessionId:", refreshed.createdSessionId);
+        if (refreshed.status === "complete" && refreshed.createdSessionId && setSignUpActive) {
+          await setSignUpActive({ session: refreshed.createdSessionId });
+          router.replace("/(tabs)");
+          return;
+        }
+        // If still not complete, try updating with empty object to trigger completion
+        try {
+          const updated = await signUp!.update({});
+          console.log("[Auth] signUp.update result:", updated.status, "sessionId:", updated.createdSessionId);
+          if (updated.status === "complete" && updated.createdSessionId && setSignUpActive) {
+            await setSignUpActive({ session: updated.createdSessionId });
+            router.replace("/(tabs)");
+            return;
+          }
+        } catch (updateErr) {
+          console.log("[Auth] signUp.update failed:", (updateErr as Error)?.message);
+        }
+        setError("Account created! Please go back and sign in with your email and password.");
+        setVerified(true);
+        return;
       }
     } catch (err) {
       const msg = (err as Error)?.message ?? "";
       console.log("[Auth] verify error:", msg);
       if (msg.toLowerCase().includes("already been verified")) {
-        // Try direct sign-in since account is already verified
         console.log("[Auth] already verified — attempting signIn for:", email);
         try {
           const signInResult = await signIn!.create({ identifier: email, password });
@@ -167,7 +194,6 @@ export default function AuthScreen() {
         } catch (signInErr) {
           console.log("[Auth] post-verify signIn failed:", (signInErr as Error)?.message);
         }
-        // Fallback: show manual sign-in screen
         setVerified(true);
         setError("");
         return;
@@ -202,12 +228,39 @@ export default function AuthScreen() {
         router.replace("/(tabs)");
         return;
       }
+    } catch (err) {
+      console.log("[Auth] cached session failed:", (err as Error)?.message);
+    }
+    // Try: recreate sign-up to finalize it
+    try {
+      const refreshed = await signUp!.create({ emailAddress: email, password, firstName: name });
+      console.log("[Auth] signUp.create result:", refreshed.status, "sessionId:", refreshed.createdSessionId, "missingFields:", signUp?.missingFields);
+      if (refreshed.status === "complete" && refreshed.createdSessionId && setSignUpActive) {
+        await setSignUpActive({ session: refreshed.createdSessionId });
+        router.replace("/(tabs)");
+        return;
+      }
+      if (refreshed.status === "missing_requirements") {
+        const updated = await signUp!.update({});
+        console.log("[Auth] signUp.update result:", updated.status, "sessionId:", updated.createdSessionId);
+        if (updated.status === "complete" && updated.createdSessionId && setSignUpActive) {
+          await setSignUpActive({ session: updated.createdSessionId });
+          router.replace("/(tabs)");
+          return;
+        }
+      }
+    } catch (err) {
+      console.log("[Auth] signUp.create failed:", (err as Error)?.message);
+    }
+    // Last resort: sign in
+    try {
       console.log("[Auth] signIn.create for verified user:", email);
       const result = await signIn!.create({ identifier: email, password });
       console.log("[Auth] signIn result status:", result.status, "sessionId:", result.createdSessionId);
       if (result.status === "complete" && result.createdSessionId && setSignInActive) {
         await setSignInActive({ session: result.createdSessionId });
         router.replace("/(tabs)");
+        return;
       }
     } catch (err) {
       console.log("[Auth] handleVerifiedSignIn error:", (err as Error)?.message);

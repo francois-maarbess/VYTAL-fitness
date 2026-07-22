@@ -7,16 +7,19 @@ import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { SymbolView } from 'expo-symbols';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useUser } from '@/context/UserContext';
 
 export default function TabLayout() {
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded: clerkLoaded, isSignedIn } = useAuth();
+  const { isLoading: userLoading, profile } = useUser();
   const colors = useColors();
   const colorScheme = useColorScheme();
   const isIOS = Platform.OS === 'ios';
   const isWeb = Platform.OS === 'web';
   const insets = useSafeAreaInsets();
 
-  if (!isLoaded) {
+  // Single authoritative gate: wait for BOTH Clerk and UserContext
+  if (!clerkLoaded || userLoading) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -26,6 +29,11 @@ export default function TabLayout() {
 
   if (!isSignedIn) {
     return <Redirect href="/auth" />;
+  }
+
+  // Onboarding guard — new users who haven't completed onboarding
+  if (!profile || !profile.onboardingComplete) {
+    return <Redirect href="/onboarding" />;
   }
 
   return (
