@@ -11,7 +11,7 @@ const SYNC_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
  * when the device supports it.
  */
 export function useHealthConnectSync() {
-  const { setStepsToday, stepsToday } = useUser();
+  const { setStepsToday } = useUser();
   const synced = useRef(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 

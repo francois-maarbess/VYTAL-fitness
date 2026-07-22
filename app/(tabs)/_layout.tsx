@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Platform, StyleSheet, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
 import { Redirect, Tabs } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
@@ -13,7 +13,6 @@ export default function TabLayout() {
   const { isLoaded: clerkLoaded, isSignedIn } = useAuth();
   const { isLoading: userLoading, profile } = useUser();
   const colors = useColors();
-  const colorScheme = useColorScheme();
   const isIOS = Platform.OS === 'ios';
   const isWeb = Platform.OS === 'web';
   const insets = useSafeAreaInsets();
