@@ -60,7 +60,10 @@ export default function CoachScreen() {
   const abortRef = useRef<AbortController | null>(null);
 
   const topPad = Platform.OS === 'web' ? 60 : insets.top;
-  const botPad = Platform.OS === 'web' ? 16 : insets.bottom;
+  const tabBarHeight = Platform.OS === 'web' ? 60 : 60 + insets.bottom;
+  const botPad = tabBarHeight + 10;
+
+
 
   async function handleSend(text: string) {
     const trimmed = text.trim();
@@ -84,7 +87,6 @@ export default function CoachScreen() {
           gender: profile.gender, goals: profile.goals, injuries: profile.injuries,
           equipment: profile.equipment, activityLevel: profile.activityLevel,
           streak, totalWorkouts,
-          // Live daily state
           nutritionToday, sleepHours, stepsToday, readinessScore, tdee, bmr,
           caloriesConsumed: nutritionToday.calories,
           protein: nutritionToday.protein, carbs: nutritionToday.carbs, fat: nutritionToday.fat,
@@ -93,6 +95,10 @@ export default function CoachScreen() {
       : undefined;
 
     abortRef.current = new AbortController();
+
+    let fullContent = '';
+    let assistantId = uid();
+    let addedAssistant = false;
 
     try {
       const response = await fetch(`${getApiBaseUrl()}api/coach/chat`, {
@@ -103,14 +109,10 @@ export default function CoachScreen() {
       });
 
       if (!response.ok) {
-        const body = await response.text().catch(() => '');
-        throw new Error(`HTTP ${response.status}: ${body.slice(0, 200)}`);
+        throw new Error(`HTTP ${response.status}`);
       }
 
       const raw = await response.text();
-      let fullContent = '';
-      let assistantId = uid();
-      let addedAssistant = false;
 
       for (const line of raw.split('\n')) {
         if (!line.startsWith('data: ')) continue;
@@ -138,29 +140,27 @@ export default function CoachScreen() {
           }
         } catch {}
       }
-
-      // Stream ended — process write-back commands in logical order
+    } catch (err: unknown) {
+      if ((err as Error)?.name === 'AbortError') { setIsStreaming(false); setShowTyping(false); return; }
+      setIsStreaming(false);
+      setShowTyping(false);
+      const msg = (err as Error)?.message ?? 'unknown error';
+      console.error("[Coach] coach chat error:", msg);
+      setMessages(prev => [...prev, { id: uid(), role: 'assistant', content: `Can't reach VYTAL AI at ${getApiBaseUrl()}api/coach/chat — ${msg}` }]);
+      return;
+    } finally {
+      // Process write-back commands if present
       if (fullContent) {
-        // 1. Resets first
-        if (fullContent.includes('[RESET_MACROS]')) {
-          await resetNutrition();
-        }
-        // 2. Set operations
+        if (fullContent.includes('[RESET_MACROS]')) await resetNutrition();
         const sleepMatch = fullContent.match(/\[SET_SLEEP:([\d.]+)\]/);
         if (sleepMatch) await setSleepHours(parseFloat(sleepMatch[1]));
         const stepsMatch = fullContent.match(/\[SET_STEPS:(\d+)\]/);
         if (stepsMatch) await setStepsToday(parseInt(stepsMatch[1]));
-        // 3. Add operations (multiple allowed)
         const addCalMatches = [...fullContent.matchAll(/\[ADD_CALORIES:(\d+)\]/g)];
         for (const m of addCalMatches) await updateNutrition({ calories: parseInt(m[1]), protein: 0, carbs: 0, fat: 0 });
         const addProtMatches = [...fullContent.matchAll(/\[ADD_PROTEIN:(\d+)\]/g)];
         for (const m of addProtMatches) await updateNutrition({ calories: 0, protein: parseInt(m[1]), carbs: 0, fat: 0 });
-        const addCarbMatches = [...fullContent.matchAll(/\[ADD_CARBS:(\d+)\]/g)];
-        for (const m of addCarbMatches) await updateNutrition({ calories: 0, protein: 0, carbs: parseInt(m[1]), fat: 0 });
-        const addFatMatches = [...fullContent.matchAll(/\[ADD_FAT:(\d+)\]/g)];
-        for (const m of addFatMatches) await updateNutrition({ calories: 0, protein: 0, carbs: 0, fat: parseInt(m[1]) });
 
-        // Update final message with clean content
         const cleanContent = fullContent.replace(/\[(?:RESET_MACROS|SET_SLEEP:[\d.]+|SET_STEPS:\d+|ADD_CALORIES:\d+|ADD_PROTEIN:\d+|ADD_CARBS:\d+|ADD_FAT:\d+)\]/g, '').trim();
         if (addedAssistant) {
           setMessages(prev => {
@@ -171,13 +171,6 @@ export default function CoachScreen() {
           });
         }
       }
-    } catch (err: unknown) {
-      if ((err as Error)?.name === 'AbortError') { setIsStreaming(false); setShowTyping(false); return; }
-      setShowTyping(false);
-      const msg = (err as Error)?.message ?? 'unknown error';
-      console.error("[Auth] coach chat error:", msg);
-      setMessages(prev => [...prev, { id: uid(), role: 'assistant', content: `⚠️ ${msg}. Make sure the API server is running (npm run start:all).` }]);
-    } finally {
       setIsStreaming(false);
       setShowTyping(false);
     }
@@ -232,7 +225,7 @@ export default function CoachScreen() {
         {/* Quick prompts — tiny pills */}
         {messages.length <= 1 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 16, gap: 6, paddingBottom: 4 }}
+            contentContainerStyle={{ paddingHorizontal: 16, gap: 6, paddingBottom: 6 }}
             style={{ flexShrink: 0 }}
           >
             {QUICK_PROMPTS.map(p => (
@@ -246,7 +239,7 @@ export default function CoachScreen() {
         )}
 
         {/* Input bar */}
-        <View style={[styles.inputBar, { borderTopColor: colors.border, paddingBottom: Math.max(botPad, 16) }]}>
+        <View style={[styles.inputBar, { borderTopColor: colors.border, paddingBottom: botPad }]}>
           <TextInput
             ref={inputRef}
             value={input}
@@ -284,3 +277,4 @@ const styles = StyleSheet.create({
   textInput: { flex: 1, borderRadius: 22, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15, fontFamily: 'Inter_400Regular', maxHeight: 110 },
   sendBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
 });
+

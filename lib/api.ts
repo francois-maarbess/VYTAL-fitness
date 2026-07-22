@@ -7,7 +7,8 @@ export function getApiBaseUrl(): string {
   if (domain) {
     return `https://${domain}/`;
   }
-  return 'http://192.168.1.7:8080/';
+  return 'http://localhost:8080/';
 }
 
 // Note: auth headers must be obtained via useAuth().getToken() inside a component.
+
