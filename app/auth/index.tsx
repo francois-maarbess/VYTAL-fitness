@@ -101,7 +101,7 @@ export default function AuthScreen() {
     const startFlow = strategy === "apple" ? startAppleOAuth : startGoogleOAuth;
     try {
       const { createdSessionId, setActive } = await startFlow({
-        redirectUrl: `${Platform.select({ web: window.location.origin, default: "vytal" })}/auth/sso-callback`,
+        redirectUrl: `${Platform.select({ web: window.location.origin, default: "mobile" })}/auth/sso-callback`,
       });
       if (createdSessionId && setActive) {
         await setActive({ session: createdSessionId });
@@ -154,28 +154,28 @@ export default function AuthScreen() {
       // missing_requirements means Clerk accepted the code but needs more data
       if (result.status === "missing_requirements") {
         console.log("[Auth] missing_requirements — fields needed:", signUp?.missingFields);
-        // Try to complete the sign-up by re-creating it (Clerk returns the existing one)
-        const refreshed = await signUp!.create({ emailAddress: email, password, firstName: name });
-        console.log("[Auth] signUp.create after missing_requirements:", refreshed.status, "sessionId:", refreshed.createdSessionId);
-        if (refreshed.status === "complete" && refreshed.createdSessionId && setSignUpActive) {
-          await setSignUpActive({ session: refreshed.createdSessionId });
-          router.replace("/(tabs)");
-          return;
-        }
-        // If still not complete, try updating with empty object to trigger completion
-        try {
-          const updated = await signUp!.update({});
-          console.log("[Auth] signUp.update result:", updated.status, "sessionId:", updated.createdSessionId);
-          if (updated.status === "complete" && updated.createdSessionId && setSignUpActive) {
-            await setSignUpActive({ session: updated.createdSessionId });
-            router.replace("/(tabs)");
-            return;
+        const missing = signUp?.missingFields ?? [];
+        // Strategy: try to reload the existing sign-up, then attempt to complete it
+        for (const attempt of [
+          () => signUp!.update({}),
+          () => signUp!.create({ emailAddress: email, password }),
+          () => signUp!.create({ emailAddress: email, password, firstName: name }),
+        ]) {
+          try {
+            const res = await attempt();
+            console.log("[Auth] attempt status:", res.status, "sessionId:", res.createdSessionId, "missingFields:", signUp?.missingFields);
+            if (res.status === "complete" && res.createdSessionId && setSignUpActive) {
+              await setSignUpActive({ session: res.createdSessionId });
+              router.replace("/(tabs)");
+              return;
+            }
+          } catch (e) {
+            console.log("[Auth] attempt failed:", (e as Error)?.message);
           }
-        } catch (updateErr) {
-          console.log("[Auth] signUp.update failed:", (updateErr as Error)?.message);
         }
-        setError("Account created! Please go back and sign in with your email and password.");
+        // Still stuck — show the verified screen and try sign-in as last resort
         setVerified(true);
+        setError("");
         return;
       }
     } catch (err) {
