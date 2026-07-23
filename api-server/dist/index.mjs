@@ -65528,7 +65528,7 @@ var groq = new openai_default({
 });
 var SYSTEM_PROMPT = `You are VYTAL ai, a world-class AI fitness and longevity coach embedded in the VYTAL Fitness app.
 You have full read/write access to the user's live state: nutrition, sleep, steps, readiness, and workouts.
-Be concise, precise, and motivating. No emojis. Prioritise safety.
+Be concise, precise, and motivating. No emojis. No markdown. No asterisks. No bold or italic formatting. Return clean plain text only. Prioritise safety.
 
 WRITE-BACK COMMANDS \u2014 embed these invisibly in your response when the user's message implies a state change:
 - To reset the user's macro/calorie log to zero: include [RESET_MACROS]
@@ -87407,50 +87407,37 @@ var groq2 = new openai_default({
   baseURL: "https://api.groq.com/openai/v1"
 });
 var USDA_API_KEY = process.env.USDA_API_KEY ?? "";
-var EXTRACT_PROMPT = `You are an NLP food entity extractor. Parse the user's text and extract each distinct food or beverage item with its amount.
+var EXTRACT_PROMPT = `You are a world-class nutritionist and food recognition AI. Parse the user's food description and return accurate nutritional estimates.
 
-Rules:
-1. Identify each food item separately.
-2. Extract the weight in grams if specified (e.g., "200g" -> 200, "half a kilo" -> 500, "a pound" -> 454).
-3. Extract volume if specified as cups, tbsp, tsp, ml, or liters. Use standard abbreviations.
-4. If the user says conversational text ("Hello", "How are you?"), non-food items ("I ate a shoe"), or irrelevant statements, set isValidFood to false.
-5. For ambiguous amounts, use your best estimate in weight_g.
-
-Return ONLY valid JSON with this exact schema:
+CRITICAL: Return ONLY valid JSON matching this exact schema:
 {
   "isValidFood": boolean,
   "message": string,
-  "items": [{ "food": string, "weight_g": number | null, "volume": string | null }]
-}`;
-var VOLUME_TO_GRAMS = {
-  "cup": 240,
-  "cups": 240,
-  "tbsp": 15,
-  "tablespoon": 15,
-  "tablespoons": 15,
-  "tsp": 5,
-  "teaspoon": 5,
-  "teaspoons": 5,
-  "ml": 1,
-  "milliliter": 1,
-  "milliliters": 1,
-  "l": 1e3,
-  "liter": 1e3,
-  "liters": 1e3,
-  "fl oz": 30,
-  "fluid ounce": 30,
-  "fluid ounces": 30,
-  "oz": 30
-};
-function volumeToGrams(volume) {
-  if (!volume) return null;
-  const lower = volume.toLowerCase().trim();
-  for (const [unit, grams] of Object.entries(VOLUME_TO_GRAMS)) {
-    const match2 = lower.match(new RegExp(`^(\\d+(?:\\.\\d+)?)\\s*${unit}$`));
-    if (match2) return parseFloat(match2[1]) * grams;
-  }
-  return null;
+  "items": [{ "food": string, "weight_g": number, "calories": number, "protein": number, "carbs": number, "fat": number }],
+  "totalMacros": { "calories": number, "protein": number, "carbs": number, "fat": number }
 }
+
+Rules:
+1. Recognize ALL foods including composite/cultural dishes (e.g., "fassoulya with rice", "butter chicken", "pho", "pad thai", "stew"). Break them down into ingredients.
+2. Estimate weight in grams based on description:
+   - Explicit weight (e.g., "200g steak") \u2192 use exactly 200
+   - "2 kg of steak" \u2192 2000
+   - "a plate of" \u2192 ~400g total (typical dinner plate serving)
+   - "a bowl of" \u2192 ~300g
+   - "a cup of" \u2192 ~240g
+   - No amount specified \u2192 assume standard serving (200g for main dish, 150g for sides)
+3. Calculate accurate macros for EACH item using your knowledge of standard nutritional data:
+   - Steak/beef: ~250-290 kcal, ~26g protein, ~15g fat per 100g cooked
+   - Chicken breast: ~165 kcal, ~31g protein, ~3.6g fat per 100g cooked
+   - White rice (cooked): ~130 kcal, ~2.7g protein, ~28g carbs per 100g
+   - Pasta (cooked): ~131 kcal, ~5g protein, ~25g carbs per 100g
+   - Olive oil: ~884 kcal, ~100g fat per 100g
+   - Beans (cooked): ~130 kcal, ~9g protein, ~24g carbs per 100g
+4. For composite dishes, estimate total macros by summing ingredients:
+   - "plate of fassoulya with rice" \u2192 ~250g stew + ~200g rice = ~500-650 kcal, ~25g P, ~70g C, ~15g F
+5. If the user says conversational text, non-food items, set isValidFood to false.
+6. Set "message" to a brief description of what was recognized.
+7. Set "totalMacros" to the sum of all items' macros \u2014 this is the authoritative macro total the app will display.`;
 var NUTRIENT_IDS = {
   ENERGY: 1008,
   PROTEIN: 1003,
@@ -87511,12 +87498,12 @@ router3.post("/analyze", async (req, res) => {
       return;
     }
     const extraction = await groq2.chat.completions.create({
-      model: "llama-3.1-8b-instant",
+      model: "llama-3.3-70b-versatile",
       messages: [
         { role: "system", content: EXTRACT_PROMPT },
         { role: "user", content: text2.trim() }
       ],
-      max_tokens: 600,
+      max_tokens: 800,
       temperature: 0.1,
       response_format: { type: "json_object" }
     });
@@ -87533,29 +87520,25 @@ router3.post("/analyze", async (req, res) => {
     }
     const lookedUpItems = [];
     for (const item of parsed.items) {
-      const weightG = item.weight_g ?? volumeToGrams(item.volume) ?? 100;
+      const weightG = Math.max(item.weight_g ?? 100, 10);
+      let macros = { calories: item.calories ?? 0, protein: item.protein ?? 0, carbs: item.carbs ?? 0, fat: item.fat ?? 0 };
       const usda = await searchUSDA(item.food);
-      if (usda) {
+      if (usda && macros.calories === 0) {
         const factor = weightG / 100;
-        lookedUpItems.push({
-          name: usda.name,
-          weightGrams: Math.round(weightG * 10) / 10,
-          macros: {
-            calories: Math.round(usda.macrosPer100g.calories * factor),
-            protein: Math.round(usda.macrosPer100g.protein * factor),
-            carbs: Math.round(usda.macrosPer100g.carbs * factor),
-            fat: Math.round(usda.macrosPer100g.fat * factor)
-          }
-        });
-      } else {
-        lookedUpItems.push({
-          name: item.food,
-          weightGrams: weightG,
-          macros: { calories: 0, protein: 0, carbs: 0, fat: 0 }
-        });
+        macros = {
+          calories: Math.round(usda.macrosPer100g.calories * factor),
+          protein: Math.round(usda.macrosPer100g.protein * factor),
+          carbs: Math.round(usda.macrosPer100g.carbs * factor),
+          fat: Math.round(usda.macrosPer100g.fat * factor)
+        };
       }
+      lookedUpItems.push({
+        name: item.food,
+        weightGrams: Math.round(weightG * 10) / 10,
+        macros
+      });
     }
-    const totals = lookedUpItems.reduce(
+    const totals = parsed.totalMacros && parsed.totalMacros.calories > 0 ? parsed.totalMacros : lookedUpItems.reduce(
       (acc, item) => ({
         calories: acc.calories + item.macros.calories,
         protein: acc.protein + item.macros.protein,

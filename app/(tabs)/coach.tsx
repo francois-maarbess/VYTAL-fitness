@@ -121,9 +121,15 @@ export default function CoachScreen() {
 
       const raw = await response.text();
 
+      // Buffer-based SSE parser to handle partial lines across chunks
+      let buffer = '';
       for (const line of raw.split('\n')) {
-        if (!line.startsWith('data: ')) continue;
-        const data = line.slice(6).trim();
+        buffer += line;
+        if (!line.endsWith('\n') && raw.split('\n').indexOf(line) < raw.split('\n').length - 1) continue;
+        const trimmed = buffer.trim();
+        buffer = '';
+        if (!trimmed.startsWith('data: ')) continue;
+        const data = trimmed.slice(6).trim();
         if (data === '[DONE]') continue;
 
         try {

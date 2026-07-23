@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 
 interface Message {
@@ -12,36 +13,51 @@ interface Props {
   message: Message;
 }
 
+function formatTime(): string {
+  const d = new Date();
+  const h = d.getHours();
+  const m = d.getMinutes();
+  return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+}
+
 export function ChatBubble({ message }: Props) {
   const colors = useColors();
   const isUser = message.role === 'user';
 
+  const handleLongPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
   return (
-    <View style={[styles.row, isUser ? styles.rowUser : styles.rowAssistant]}>
+    <Pressable onLongPress={handleLongPress} style={[styles.row, isUser ? styles.rowUser : styles.rowAssistant]}>
       {!isUser && (
         <View style={[styles.avatar, { backgroundColor: `${colors.primary}22`, borderColor: colors.primary }]}>
           <Text style={[styles.avatarText, { color: colors.primary }]}>A</Text>
         </View>
       )}
-      <View
-        style={[
-          styles.bubble,
-          isUser
-            ? { backgroundColor: colors.primary, borderRadius: 18, borderBottomRightRadius: 4 }
-            : { backgroundColor: colors.card, borderRadius: 18, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: colors.border },
-          { maxWidth: '75%' },
-        ]}
-      >
-        <Text
+      <View style={{ maxWidth: '75%' }}>
+        <View
           style={[
-            styles.text,
-            { color: isUser ? colors.primaryForeground : colors.foreground },
+            styles.bubble,
+            isUser
+              ? { backgroundColor: colors.primary, borderRadius: 18, borderBottomRightRadius: 4 }
+              : { backgroundColor: colors.card, borderRadius: 18, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: colors.border },
           ]}
         >
-          {message.content}
+          <Text
+            style={[
+              styles.text,
+              { color: isUser ? colors.primaryForeground : colors.foreground },
+            ]}
+          >
+            {message.content}
+          </Text>
+        </View>
+        <Text style={{ color: colors.mutedForeground, fontSize: 9, fontFamily: 'Inter_400Regular', marginTop: 2, marginHorizontal: 4, alignSelf: isUser ? 'flex-end' : 'flex-start' }}>
+          {formatTime()}
         </Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

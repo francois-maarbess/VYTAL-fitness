@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal,
+  ActivityIndicator, Alert, KeyboardAvoidingView, Modal,
   Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -43,10 +43,10 @@ function MealRow({ meal, onDelete }: { meal: Meal; onDelete: () => void }) {
           {meal.mealType} · {meal.time}
         </Text>
       </View>
-      <View style={{ alignItems: 'flex-end', gap: 2 }}>
+      <View style={{ alignItems: 'flex-end', gap: 2, minWidth: 90 }}>
         <Text style={{ color: colors.foreground, fontSize: 14, fontFamily: 'Inter_700Bold' }}>{meal.calories} kcal</Text>
         <Text style={{ color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_400Regular' }}>
-          P{meal.protein} · C{meal.carbs} · F{meal.fat}
+          P:{meal.protein}g C:{meal.carbs}g F:{meal.fat}g
         </Text>
       </View>
       <Pressable onPress={onDelete} style={{ padding: 6 }}>
@@ -54,6 +54,73 @@ function MealRow({ meal, onDelete }: { meal: Meal; onDelete: () => void }) {
       </Pressable>
     </View>
   );
+}
+
+function ConfirmMealModal({ visible, result, onConfirm, onEdit, onCancel }: {
+  visible: boolean;
+  result: NutritionResult | null;
+  onConfirm: (result: NutritionResult) => void;
+  onEdit: (result: NutritionResult) => void;
+  onCancel: () => void;
+}) {
+  const colors = useColors();
+  if (!visible || !result) return null;
+
+  const [editable, setEditable] = useState(result);
+  const [editing, setEditing] = useState(false);
+
+  const handleSave = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    onConfirm(editable);
+  };
+
+  if (!editing) {
+    return (
+      <Modal visible transparent animationType="fade" onRequestClose={onCancel}>
+        <View style={{ flex: 1, backgroundColor: '#00000080', justifyContent: 'center', padding: 24 }}>
+          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 20 }]}>
+            <View style={{ alignItems: 'center', marginBottom: 16, gap: 8 }}>
+              <View style={[styles.mealIcon, { backgroundColor: `${colors.primary}20`, width: 48, height: 48, borderRadius: 24 }]}>
+                <Ionicons name="checkmark-circle" size={28} color={colors.primary} />
+              </View>
+              <Text style={{ color: colors.foreground, fontSize: 18, fontFamily: 'Inter_700Bold' }}>Confirm Meal</Text>
+              <Text style={{ color: colors.mutedForeground, fontSize: 13, fontFamily: 'Inter_400Regular', textAlign: 'center' }}>{editable.foodSummary}</Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+              {[
+                { label: 'Calories', val: `${editable.macros.calories}`, color: colors.primary, unit: 'kcal' },
+                { label: 'Protein', val: `${editable.macros.protein}`, color: '#00D4FF', unit: 'g' },
+                { label: 'Carbs', val: `${editable.macros.carbs}`, color: colors.secondary, unit: 'g' },
+                { label: 'Fat', val: `${editable.macros.fat}`, color: colors.accent, unit: 'g' },
+              ].map(m => (
+                <View key={m.label} style={{ flex: 1, alignItems: 'center', backgroundColor: `${m.color}12`, borderRadius: 12, paddingVertical: 12, gap: 2 }}>
+                  <Text style={{ color: m.color, fontSize: 20, fontFamily: 'Inter_700Bold' }}>{m.val}</Text>
+                  <Text style={{ color: colors.mutedForeground, fontSize: 9, fontFamily: 'Inter_500Medium' }}>{m.unit}</Text>
+                  <Text style={{ color: colors.mutedForeground, fontSize: 9, fontFamily: 'Inter_400Regular' }}>{m.label}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Pressable onPress={onCancel}
+                style={{ flex: 1, height: 48, borderRadius: 14, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold', fontSize: 15 }}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={handleSave}
+                style={{ flex: 1, height: 48, borderRadius: 14, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Text style={{ color: '#000', fontFamily: 'Inter_700Bold', fontSize: 15 }}>Log Meal</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
+  return null;
 }
 
 function NLPModal({ visible, onClose, onConfirm, getToken }: {
@@ -118,7 +185,7 @@ function NLPModal({ visible, onClose, onConfirm, getToken }: {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       data = await res.json();
     } catch {
-      console.warn("[Nutrition] Remote API unreachable, fallback to smart local macro analysis.");
+      console.warn("[Nutrition] Remote API unreachable, fallback to local macro estimation.");
       data = estimateLocalMacros(text.trim());
     } finally {
       setLoading(false);
@@ -129,7 +196,6 @@ function NLPModal({ visible, onClose, onConfirm, getToken }: {
       return;
     }
     onConfirm(data);
-    Alert.alert('Meal Logged! 🎯', `${data.foodSummary}\n+${data.macros.calories} kcal added.`);
     handleClose();
   }
 
@@ -170,7 +236,7 @@ function NLPModal({ visible, onClose, onConfirm, getToken }: {
               : <Ionicons name="flash" size={16} color={text.trim() ? '#000' : colors.mutedForeground} />
             }
             <Text style={{ color: text.trim() && !loading ? '#000' : colors.mutedForeground, fontFamily: 'Inter_700Bold', fontSize: 15 }}>
-              {loading ? 'Analysing...' : 'Analyse with AI'}
+              {loading ? 'Analyzing...' : 'Analyze with AI'}
             </Text>
           </Pressable>
         </View>
@@ -240,6 +306,8 @@ export default function NutritionScreen() {
   } = useUser();
   const [meals, setMeals] = useState<Meal[]>([]);
   const [nlpVisible, setNlpVisible] = useState(false);
+  const [pendingMeal, setPendingMeal] = useState<NutritionResult | null>(null);
+  const [confirmVisible, setConfirmVisible] = useState(false);
   const topPad = Platform.OS === 'web' ? 60 : insets.top;
 
   const totals = {
@@ -254,7 +322,14 @@ export default function NutritionScreen() {
     fat: Math.round((calorieGoal * 0.25) / 9),
   };
 
-  function handleNlpConfirm(result: { foodSummary: string | null; macros: { calories: number; protein: number; carbs: number; fat: number } }) {
+  function handleNlpResult(result: NutritionResult) {
+    setPendingMeal(result);
+    setConfirmVisible(true);
+  }
+
+  function handleConfirmMeal(result: NutritionResult) {
+    setConfirmVisible(false);
+    setPendingMeal(null);
     const now = new Date();
     const h = now.getHours();
     const timeStr = `${h % 12 || 12}:${now.getMinutes().toString().padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
@@ -486,7 +561,14 @@ export default function NutritionScreen() {
         </View>
       )}
 
-      <NLPModal visible={nlpVisible} onClose={() => setNlpVisible(false)} onConfirm={handleNlpConfirm} getToken={getToken} />
+      <NLPModal visible={nlpVisible} onClose={() => setNlpVisible(false)} onConfirm={handleNlpResult} getToken={getToken} />
+      <ConfirmMealModal
+        visible={confirmVisible}
+        result={pendingMeal}
+        onConfirm={handleConfirmMeal}
+        onEdit={(r) => { setPendingMeal(r); }}
+        onCancel={() => { setConfirmVisible(false); setPendingMeal(null); }}
+      />
     </ScrollView>
   );
 }

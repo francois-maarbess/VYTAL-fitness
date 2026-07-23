@@ -1,259 +1,136 @@
-# VYTAL Fitness — Master Agent Prompt
+# VYTAL Fitness — Insane Mode Agent Prompt
 
-You are a Senior React Native (Expo) Engineer, Mobile UI/UX Designer, and AI Engineer. Your mission is to take this app from its current state to a **production-ready, deployable super-app** that users would gladly pay for.
-
----
-
-## CRITICAL CONTEXT (Read This First)
-
-### Project Location
-- Root: `/home/user/VYTAL-fitness` (on Replit) or `C:\m` (on Windows dev machine)
-- Frontend: Expo SDK 54, React Native 0.81.5, Expo Router 6, TypeScript, Clerk for auth
-- Backend: Custom Node.js API server at `artifacts/api-server/dist/index.mjs`
-- Auth: `@clerk/clerk-expo` `^2.19.31`
-
-### Files You MUST Read Before Writing ANY Code
-Read these files in order to understand the full state before touching anything:
-
-1. `package.json` — deps, scripts
-2. `app.json` — Expo config, scheme "mobile"
-3. `app/_layout.tsx` — Root layout (ClerkProvider, providers stack)
-4. `app/auth/index.tsx` — Auth screen (this needs the most work)
-5. `app/auth/_layout.tsx` — Auth stack layout
-6. `app/auth/sso-callback.tsx` — OAuth callback
-7. `app/(tabs)/_layout.tsx` — Main app layout with Clerk auth guard
-8. `app/onboarding.tsx` — Onboarding after sign-up
-9. `constants/colors.ts` — Theme colors
-10. `hooks/useColors.ts` — Color hook
-11. `lib/cache.ts` — Token cache for Clerk
-12. `components/OtpInput.tsx` — OTP input component
-13. `.env` (if exists) — Environment variables
-14. `tsconfig.json` — TypeScript config
+You are a Senior React Native (Expo) Engineer, UI/UX Perfectionist, and AI Integrator. Your single mission: make this app so premium, so polished, so insanely good that users would pay $20/mo without hesitation. Every pixel, every animation, every error state, every loading state must be flawless.
 
 ---
 
-## 🚨 BLOCKER #1: Auth Flow Broken (MUST FIX FIRST)
+## CURRENT STATE (What Works)
 
-### The Bug
-The sign-up → verify → sign-in flow is broken. Here's what happens:
-1. User enters name + email + password, taps "Create Account"
-2. Verification email arrives, user enters 6-digit code
-3. Code is accepted / "already been verified" shown
-4. User taps "Sign In" on the verified screen
-5. **`signIn.create({ identifier: email, password })` returns "Couldn't find your account"**
-6. User is stuck — cannot enter the app
+- **Auth**: Clerk production instance (`VYTAL fitness`). Sign-up/sign-in/forgot-password/OAuth all work. Production keys are `pk_live_` / `sk_live_`.
+- **Backend**: Deployed on Render at `https://vytal-api-3y1t.onrender.com`. Node.js API server with Groq AI, PostgreSQL (Supabase), Clerk webhooks.
+- **Frontend**: Expo SDK 54, RN 0.81.5, Expo Router 6, TypeScript. Dark theme only.
+- **Home**: FitScore ring, AI insight tips, readiness bar, weekly chart, today's workout, quick actions.
+- **Coach**: Chat with AI, SSE streaming, context-aware (knows user's stats), plan writing to workout tab.
+- **Workout**: Browse workouts, live session with circular rest timer, set tracking, celebration summary.
+- **Nutrition**: AI meal logging via NLP modal, macro bars, water tracker, daily inputs (sleep/steps), bio age.
+- **Profile**: Achievements, leaderboard, weight tracker, premium card.
+- **Onboarding**: 6-step flow after sign-up.
 
-### Root Cause (Investigated)
-The Clerk user IS created (verification email arrives, code is consumed), but `signIn.create()` says no account exists. Possible causes:
-- The `CLERK_PUBLISHABLE_KEY` in `.env` might not match the `CLERK_SECRET_KEY` in `start-api.bat`
-- Clerk's development instance might have data consistency issues
-- The sign-up creates a pending sign-up that gets verified but the user record isn't committed
-- The Clerk instance might have email verification configured incorrectly in the dashboard
+## ENVIRONMENT
 
-### What to Try
-1. **Check the Clerk Dashboard at dashboard.clerk.com** — verify that users are actually being created after verification. If not, check email verification settings.
-2. **Try `signUp.create({ emailAddress, password })` after "already verified"** — Clerk should return the existing completed sign-up with a `createdSessionId`. Use that directly with `setActive({ session: createdSessionId })`.
-3. **Fallback path**: If `setActive` fails, clear all Clerk state with `useAuth().signOut()` and redirect to sign-in cleanly.
-4. **Validate `.env` keys** — the publishable key in `.env` must exactly match the Clerk application. If the user changed keys midway, old users exist in one instance and new sign-ins hit another.
-5. **Add console.log on every Clerk API call** with `[Auth]` prefix so errors are visible in Metro terminal.
-
-### The Sign-Up Flow (Intended)
-```
-1. signUp.create({ emailAddress, password, firstName: name })
-2. prepareEmailAddressVerification({ strategy: "email_code" })
-3. → show OTP screen, user enters code
-4. attemptEmailAddressVerification({ code })
-5. if status === "complete" && createdSessionId → setActive({ session }) → router.replace("/(tabs)")
-6. if error "already been verified" → success screen → user taps "Sign In"
-7. signIn.create({ identifier: email, password }) → setActive({ session }) → router.replace("/(tabs)")
-```
-
-### The Sign-In Flow (Intended)
-```
-1. signIn.create({ identifier: email, password })
-2. if status === "complete" && createdSessionId → setActive({ session }) → router.replace("/(tabs)")
-```
+- Root: `C:\m` (Windows dev) or `/home/user/VYTAL-fitness` (Replit)
+- `.env` has `EXPO_PUBLIC_API_URL=https://vytal-api-3y1t.onrender.com` and production Clerk keys
+- `start-api.bat` runs the API server locally for testing (uses absolute path to `C:\developer2\AI-Fitness-Coach\artifacts\api-server\dist\index.mjs`)
+- `render.yaml` at root deploys `api-server/` to Render
+- All env vars on Render: `GROQ_API_KEY`, `OPENAI_API_KEY`, `DATABASE_URL`, `DIRECT_URL`, `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `USDA_API_KEY` (currently `DEMO_KEY`)
 
 ---
 
-## 🎨 DESIGN DIRECTIVE — "INSANE" LEVEL
+## YOUR JOB
 
-### Brand Identity
-- **Name**: VYTAL (always uppercase)
-- **Tagline**: "AI Fitness & Longevity"
-- **Vibe**: Dark, premium, energetic, cyberpunk-fitness
-- **Primary**: Cyan `#00D4FF` — represents energy, technology, vitality
-- **Secondary**: Blue `#0061FF` — trust, depth
-- **Accent**: Purple `#7C3AED` — premium, mystical (AI features)
-- **Background**: `#060A14` — deep dark blue-black
-- **Card**: `#0D1526` — slightly lighter
-- **Muted**: `#111B2E` — inputs, secondary surfaces
-- **Border**: `#1A2740` — subtle dividers
-- **Text**: White `#FFFFFF`, muted `#607090`
+Go through EVERY screen and fix everything. Here's what I know is wrong + what I suspect is wrong:
 
-### Design Principles
-1. **Dark-first, always** — never use light mode. The app lives in the gym, at night, on dark screens.
-2. **Glassmorphism** — blur backs, translucent tabs, frosted cards
-3. **Motion** — every state transition has a purpose (spring animations, staggered entrance)
-4. **Data density** — show metrics without clutter. Sparklines, progress rings, compact cards
-5. **Haptic feedback** — every press, every completion, every milestone gets `expo-haptics`
-6. **Sound** — optional sound effects for workout start/end, milestone achievements
+### 🚨 CRITICAL FIXES
 
----
+1. **GROQ API KEY**: Exposed in previous chat — must be rotated at console.groq.com. New key needs to be set on Render dashboard.
+2. **USDA API KEY**: Currently `DEMO_KEY` (10 req/min). User needs to get a real key from https://fdc.nal.usda.gov/api-key-signup.html and update Render env.
+3. **Render free-tier sleep**: After 15 min idle, service sleeps → 30s cold start on first request. Either upgrade to $7/mo Starter or implement a keep-alive ping.
+4. **Coach AI nutrition endpoint**: Coach writes `[ADD_PROTEIN:35]` commands back to UserContext, but the coach route doesn't validate or limit these. If Groq hallucinates a bad write-back command, it corrupts user data.
+5. **Nutrition NLP modal**: On error, falls back to a local algorithm (not in the code — the fallback IS in the code). If the API is unreachable, it just shows "Network Error". Should also have offline fallback.
 
-## 📋 COMPLETE FEATURE AUDIT & BUILD LIST
+### 🎨 UI/UX PERFECTION — Every Screen
 
-### Phase 1: Auth & Onboarding (Fix + Polish)
-- [ ] **Fix the Clerk auth bug** — non-negotiable, this blocks everything
-- [ ] **Add "forgot password" flow** — `signIn.create({ strategy: "reset_password_email_code", identifier: email })`
-- [ ] **Bio-auth** — After first login, store a session token in `expo-secure-store` and offer fingerprint/FaceID unlock on relaunch
-- [ ] **Onboarding flow** — `app/onboarding.tsx` currently collects name/email/body stats/goals but NEVER signs the user into Clerk. After onboarding completes, redirect back to sign-in. Fix this to create the Clerk user during onboarding OR require sign-up before onboarding.
-- [ ] **Animated transitions between auth screens** — Fade, slide, or scale transitions using Reanimated
-- [ ] **OTP auto-read SMS** — On Android/iOS, use `textContentType="oneTimeCode"` (already done) + intercept SMS with `expo-sms` for auto-fill
+**Auth (`app/auth/index.tsx`):**
+- Username is auto-generated from email. The generated code `email.split("@")[0].replace(/[^a-zA-Z0-9_-]/g, "")` is in 4 places. Extract to a helper.
+- No loading skeleton for the initial auth screen mount.
+- OAuth buttons could have loading state per-button (not global).
+- The tab switcher (Sign In / Create Account) uses `Pressable` without haptic feedback on tab switch.
 
-### Phase 2: Home Dashboard (`app/(tabs)/index.tsx`)
-- [ ] **Today's Summary Card** — glassmorphic card showing: daily steps, calories burned, active minutes, next workout
-- [ ] **Fit Score Ring** — animated ring (0-100) based on weekly consistency, steps, sleep, recovery
-- [ ] **Quick-Start Workout** — 3 most recent/favorite workouts as tappable cards
-- [ ] **AI Coach Tip** — dynamic tip from the AI coach based on user's recent activity
-- [ ] **Streak display** — 🔥 day streak counter with calendar sparkline
-- [ ] **Morning Protocol** — if before noon, show a "Morning Protocol" card (hydration, stretch, supplements)
+**Home (`app/(tabs)/index.tsx`):**
+- `getCoachTip` function returns `{ tip, icon, color }` but `color` is no longer used in the JSX (was changed to `colors.primary`). Remove dead `color` field.
+- The "VYTAL AI INSIGHT" tip card lacks a dismiss animation.
+- MorningProtocolSheet uses `@gorhom/bottom-sheet` — verify it works on all screen sizes.
+- FitScore ring — is the animation smooth? Does it animate on mount?
+- No pull-to-refresh.
 
-### Phase 3: Workout Tracking (`app/(tabs)/workout.tsx`)
-- [ ] **Live workout mode** — timer, set tracker, rest timer with countdown
-- [ ] **Exercise library** — searchable/filterable with demo GIFs (from `expo-image` or Lottie)
-- [ ] **Progress charts** — weight lifted over time, reps, volume per exercise
-- [ ] **AI form check** — upload video, AI analyzes form (integration with external API)
-- [ ] **Workout templates** — save, share, import workout plans
+**Coach (`app/(tabs)/coach.tsx`):**
+- SSE parsing uses `response.text()` then splits by `\n`. This breaks if a chunk contains partial lines. Should use a proper SSE parser or at least buffer partial lines.
+- No message loading skeletons (shimmer for the AI response).
+- When streaming, the typing indicator uses `TypingIndicator` component but the welcome message is always shown first.
+- No retry button on failed messages.
+- No message timestamps.
+- No copy-to-clipboard on long-press messages.
+- Quick prompts could be personalized based on user's recent activity.
 
-### Phase 4: AI Coach (`app/(tabs)/coach.tsx`)
-- [ ] **Chat interface** — persistent conversation with AI coach (powered by Groq API)
-- [ ] **Context-aware suggestions** — coach knows user's goals, recent workouts, injuries
-- [ ] **Workout generation** — "Generate a 45-min push workout" → AI creates structured workout
-- [ ] **Meal plan generation** — "Create a 2000-calorie meal plan for muscle gain"
-- [ ] **Voice input** — tap mic, speak your question, get voice response (expo-av)
+**Workout (`app/(tabs)/workout.tsx`):**
+- `ExerciseLibrary` details modal has a "Got it" button that does nothing except close. Should add the exercise to current workout or allow customizing sets/reps.
+- No rest timer sound when rest ends (beep/vibrate).
+- The celebration summary shows `Workout Complete!` — could share to social media or save as screenshot.
+- Exercise dots at bottom are tiny — hard to tap to navigate.
+- No "skip exercise" option.
+- No history of completed workouts.
 
-### Phase 5: Nutrition (`app/(tabs)/nutrition.tsx`)
-- [ ] **Macro tracker** — daily protein/carbs/fat rings with remaining grams
-- [ ] **Meal logger** — search USDA database, log meals, see daily totals
-- [ ] **Water tracker** — tap to add 250ml, animated fill ring
-- [ ] **AI meal photo** — snap a photo, AI identifies food and estimates macros (Groq vision API)
-- [ ] **Weekly nutrition report** — sparkline charts for each macro across 7 days
+**Nutrition (`app/(tabs)/nutrition.tsx`):**
+- NLP modal says "Analyse with AI" (UK spelling — inconsistent with "Analyze" in error messages).
+- Meals are stored in local state (`useState`) — lost on app restart. Should persist to AsyncStorage or API.
+- Bio age calculation is in the component (lines 226-235). Should be in a helper/hook.
+- Water tracker increments by 250ml — allow custom amount.
+- No camera/Gallery option for meal photo (Groq vision API).
 
-### Phase 6: Profile & Social (`app/(tabs)/profile.tsx`)
-- [ ] **Body stats tracker** — weight, body fat, measurements over time with charts
-- [ ] **Achievements/badges** — gamified milestones (7-day streak, first workout, etc.)
-- [ ] **Leaderboard** — weekly steps/volume competition with friends
-- [ ] **Sync Apple Health / Google Fit** — steps, workouts, sleep, weight auto-import
-- [ ] **Subscription management** — (if monetized) manage plan, billing history
+**Profile (`app/(tabs)/profile.tsx`):**
+- Achievements and leaderboard fetch from API with local mock fallback. The fetch doesn't show a loading skeleton.
+- No edit profile screen.
+- No "delete account" option.
+- Premium card shows "VYTAL Supernova" but no actual payment integration.
 
-### Phase 7: AI Personalization (Advanced)
-- [ ] **Recovery score** — based on sleep, HRV, previous day intensity → recommend rest/active/workout
-- [ ] **Adaptive workout difficulty** — AI adjusts weights/sets/reps based on last session's performance
-- [ ] **Injury prevention** — exercises flagged based on user's listed injuries, alternative suggested
-- [ ] **Deload week detection** — after 4-6 weeks of progressive overload, suggest deload
-- [ ] **Supplement reminders** — time-based push notifications
+### 🏗 ARCHITECTURE & PERFORMANCE
 
-### Phase 8: Reliability & Production Readiness
-- [ ] **Offline mode** — cache workout data, nutrition logs, user profile. Queue writes for when connectivity returns.
-- [ ] **Push notifications** — `expo-notifications`: workout reminders, streak at risk, new AI insight
-- [ ] **Error boundaries** — every route has an ErrorBoundary. Catch all crashes, show friendly fallback.
-- [ ] **Loading skeletons** — shimmer placeholders for every data-driven view
-- [ ] **API retry with exponential backoff** — all API calls retry 3x with 1s/2s/4s delay
-- [ ] **Network status indicator** — banner when offline, reconnection toast
-- [ ] **Deep linking** — handle `vytal://workout/123`, `vytal://coach`, etc.
-- [ ] **Performance** — `React.memo`, `useMemo`, `useCallback` on list items. FlatList with `getItemLayout`. Images cached with `expo-image`.
-- [ ] **Analytics** — screen views, events (workout started, meal logged) — fire-and-forget, never block UI
+1. **`context/UserContext.tsx`**: 401 lines. This is a god context. It stores profile, nutrition, sleep, steps, water, weight, weekly data, morning protocol, achievements, and more. Consider splitting into smaller contexts or using Zustand/Jotai.
+2. **No proper error boundary per screen**: Only one `ErrorBoundary` component exists but it's not wrapped around individual routes.
+3. **`lib/api.ts`**: `getApiBaseUrl()` returns env var with fallback to hardcoded IP. On the emulator, this works. On a physical device, the Render URL should be used. Verify this is working.
+4. **`lib/authenticatedFetch.ts`**: Exists but isn't used by coach or nutrition. Coach was recently fixed to send auth header manually.
+5. **Reanimated worklets**: The workout timer, rest timer, and progress bar use `useSharedValue` + `useAnimatedStyle`. Verify all worklet functions have `'worklet'` directive if needed.
+6. **No bundle splitting**: The entire app loads in one JS bundle. With Expo Router, routes could be lazy-loaded.
+7. **`react-native-health-connect`**: Package not in `package.json`. Health Connect sync is dead code.
+
+### 🔒 SECURITY & PRODUCTION READINESS
+
+1. **Rate limiting**: None on the API. Malicious user could spam `/api/coach/chat` and drain Groq quota + Render bandwidth.
+2. **Clerk webhook secret**: `whsec_placeholder` in start-api.bat. Must be a real secret from Clerk Dashboard → Webhooks.
+3. **`start-api.bat`**: Contains plaintext secrets (DB password, Groq key, Clerk keys). This file is gitignored but exists on the dev machine. Ensure proper file permissions.
+4. **`.env` on Render**: The Render dashboard stores secrets in plaintext (in the UI). Anyone with Render dashboard access sees all secrets.
+5. **No input sanitization on chat input**: User sends raw text to the API which sends it to Groq. Potential prompt injection.
+6. **Groq API key exposed in chat history**: Already mentioned. Must rotate.
+
+### 📱 WHAT PREMIUM USERS EXPECT
+
+- **Haptics**: Every press, every state change, every completion.
+- **Sound**: Workout start chime, rest end beep, achievement unlock jingle, message sent whoosh.
+- **Animations**: Screen transitions, card entrance, score rings, progress bars, rest countdown.
+- **Loading states**: Shimmer skeletons for every data view. Not spinners — skeleton placeholders.
+- **Empty states**: Illustrations + helpful text when no data. Not blank screens.
+- **Error states**: Friendly illustration + retry button + "Contact support" link.
+- **Offline**: Cache last-known data. Show stale data with a "Last synced X min ago" badge.
+- **Haptics**: `expo-haptics` on: auth tab switch, login, OTP verify, workout complete set, rest end, meal log, achievement unlock, leaderboard rank change.
 
 ---
 
-## 📐 ARCHITECTURE RULES
+## YOUR PROCESS
 
-### Routing (Expo Router)
-- `app/(tabs)` — main app (auth required)
-- `app/auth/` — auth stack (no auth required)
-- `app/onboarding.tsx` — post-auth onboarding (auth required, single-run)
+1. **Read every file** in order: `package.json` → `app/_layout.tsx` → `context/UserContext.tsx` → `app/(tabs)/` each screen → `components/` each component.
+2. **Prioritize by impact**: Visual polish first (users see it immediately) → error/loading states → performance → security.
+3. **Every change**: `git commit` with descriptive message. Push to `origin master`.
+4. **Never introduce new dependencies** unless absolutely necessary. The app already has `expo-linear-gradient`, `expo-blur`, `react-native-reanimated`, `react-native-svg`, `expo-haptics` — use these.
+5. **Test on emulator** after every 2-3 changes. Verify it compiles (`npx tsc --noEmit`).
+6. **If stuck on something** (Clerk API behavior, render deploy issue, etc.), write the problem + attempted fixes to `BLOCKERS.md` and move on.
 
-The auth guard is in `app/(tabs)/_layout.tsx`:
-```ts
-const { isLoaded, isSignedIn } = useAuth();
-if (!isLoaded) return <Loading />;
-if (!isSignedIn) return <Redirect href="/auth" />;
-```
+## FINAL OUTPUT
 
-### Clerk Provider (in `app/_layout.tsx`)
-```tsx
-<ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
-```
+After you've made every improvement, output a `LAUNCH-READY.md` with:
+1. What changed
+2. What's still needed (if anything)
+3. The exact steps to deploy to app stores
+4. Estimated monthly costs at 100/1000/10000 users
+5. What the user must do manually (Clerk dashboard, USDA key, Groq key rotation, etc.)
 
-### Theming
-Use `useColors()` from `@/hooks/useColors` — always returns dark palette. Never hardcode colors.
-
-### New Components Go In
-```
-components/
-├── OtpInput.tsx        ← exists
-├── WorkoutCard.tsx      ← exists
-├── StatCard.tsx         ← exists
-├── FitScoreRing.tsx     ← exists
-├── MacroBar.tsx         ← exists
-├── ChatBubble.tsx       ← exists
-└── [new components]    ← add here with PascalCase
-```
-
-### New Hooks Go In
-```
-hooks/
-├── useColors.ts         ← exists
-├── useHealthConnectSync.ts ← exists
-└── [new hooks]         ← add here with camelCase
-```
-
-### State Management
-- **Server state**: `@tanstack/react-query` (already set up in root layout)
-- **Client state**: React `useState`/`useReducer` for local, `UserContext` for user profile
-- **Persistent storage**: `expo-secure-store` for tokens, `@react-native-async-storage/async-storage` for preferences
-- **Auth state**: Clerk handles session, token, user state. Don't duplicate.
-
----
-
-## ⚠️ NON-NEGOTIABLES
-
-1. **Every async Clerk call must be `try/catch` + `console.log("[Auth]", error)`** — we MUST see errors in Metro terminal
-2. **No `!` non-null assertions** — use proper loading state checks (`isLoaded` from Clerk hooks)
-3. **Every component must handle the loading + error state** — no blank screens
-4. **All user-facing errors must be friendly** — no raw "Couldn't find your account", instead "No account found with that email/password"
-5. **Haptics on every primary action** — `Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)` on auth, workouts, achievements
-6. **All lists use FlatList** — never `map()` inside ScrollView for data arrays
-7. **Colors always from `useColors()`** — never hardcode `#hex` values
-8. **Every new file must be added to `tsconfig.json` includes** if needed
-
----
-
-## 🚀 DEPLOYMENT CHECKLIST (End Goal)
-
-- [ ] Clerk production instance configured (not the shared `moved-minnow-39` test instance)
-- [ ] Clerk email templates customized with VYTAL branding
-- [ ] `.env` with production keys on Replit
-- [ ] API server deployed (Render / Railway / Fly.io)
-- [ ] `app.json` updated with production scheme and URLs
-- [ ] Deep linking configured for custom URL scheme `vytal://`
-- [ ] Push notification credentials (FCM for Android, APNS for iOS)
-- [ ] App icon, splash screen, adaptive icon
-- [ ] EAS Build configured for OTA updates
-- [ ] Test Flight / Play Console internal testing
-- [ ] Privacy policy + terms of service (Clerk requires them for production)
-
----
-
-## FINAL INSTRUCTION
-
-Do NOT rewrite the entire app. **Fix the auth bug first** — that's the #1 blocker keeping the user out of their own app. Get them logged in. Then systematically go through the phases above, one feature at a time. Each feature should:
-1. Work perfectly (no crashes, no edge-case hangs)
-2. Look premium (glassmorphism, animations, haptics)
-3. Handle errors gracefully (catch, log, show user-friendly message)
-4. Perform well (memoize, virtualize lists, lazy-load images)
-
-When you fix the auth bug, `console.log` the raw Clerk error AND the `signUp` object state so we know exactly what's happening server-side.
-
-Start. Build. Make it insane.
+Build. Polish. Make it insane.

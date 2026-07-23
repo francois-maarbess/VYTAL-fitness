@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { Pressable, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 
 interface Props {
@@ -8,18 +9,35 @@ interface Props {
   iconColor?: string;
   value: string | number;
   label: string;
+  onPress?: () => void;
 }
 
-export function StatCard({ icon, iconColor, value, label }: Props) {
+export function StatCard({ icon, iconColor, value, label, onPress }: Props) {
   const colors = useColors();
   const ic = iconColor ?? colors.primary;
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <Pressable
+      onPress={() => {
+        if (onPress) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onPress();
+        }
+      }}
+      style={({ pressed }) => [
+        styles.card,
+        {
+          backgroundColor: colors.card,
+          borderColor: colors.border,
+          opacity: pressed ? 0.82 : 1,
+          transform: [{ scale: pressed ? 0.98 : 1 }],
+        },
+      ]}
+    >
       <Ionicons name={icon} size={20} color={ic} />
       <Text style={[styles.value, { color: colors.foreground }]}>{value}</Text>
       <Text style={[styles.label, { color: colors.mutedForeground }]}>{label}</Text>
-    </View>
+    </Pressable>
   );
 }
 

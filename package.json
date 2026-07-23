@@ -17,6 +17,7 @@
     "agent-base": "^9.0.0",
     "expo": "~54.0.36",
     "expo-auth-session": "~5.5.0",
+    "expo-clipboard": "~8.0.8",
     "expo-crypto": "~13.0.0",
     "expo-dev-client": "~6.0.21",
     "expo-secure-store": "~14.0.0",

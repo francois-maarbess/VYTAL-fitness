@@ -3,6 +3,7 @@ import {
   Animated,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -42,19 +43,19 @@ function getCoachTip(opts: {
   caloriesConsumed: number;
   waterMl: number;
   hour: number;
-}): { tip: string; icon: string; color: string } {
+}): { tip: string; icon: string } {
   const { readinessScore, sleepHours, stepsToday, streak, calorieGoal, caloriesConsumed, waterMl, hour } = opts;
 
-  if (waterMl < 500 && hour >= 10) return { tip: 'You\'re behind on hydration. Aim for 2.5L daily — even mild dehydration drops performance by 10%.', icon: 'water-outline', color: '#0090CC' };
-  if (sleepHours > 0 && sleepHours < 6) return { tip: 'Short sleep detected. Prioritise 7–9h tonight — growth hormone peaks during deep sleep.', icon: 'moon-outline', color: '#7C3AED' };
-  if (readinessScore < 40) return { tip: 'Low readiness today. Consider active recovery: a 20-min walk and light stretching will serve you better than heavy training.', icon: 'pulse-outline', color: '#FF6B35' };
-  if (stepsToday < 3000 && hour >= 14) return { tip: `Only ${stepsToday.toLocaleString()} steps so far. A 15-min walk after lunch burns ~80 kcal and improves insulin sensitivity.`, icon: 'footsteps-outline', color: '#00B894' };
-  if (streak >= 7 && streak % 7 === 0) return { tip: `${streak}-day streak! 🔥 Consistency is the #1 predictor of long-term results. You're building an identity, not just a habit.`, icon: 'flame-outline', color: '#FF6B35' };
-  if (caloriesConsumed === 0 && hour >= 12) return { tip: 'No meals logged yet. Fuelling your training matters — protein within 2h of waking optimises muscle protein synthesis.', icon: 'restaurant-outline', color: '#00D4FF' };
-  if (readinessScore >= 80) return { tip: 'Readiness is optimal today. This is your window for a PR attempt or a high-intensity session — your CNS is primed.', icon: 'flash-outline', color: '#00D4FF' };
-  if (hour < 9) return { tip: 'Starting the day strong. 5 minutes of morning sunlight resets your circadian rhythm and boosts serotonin.', icon: 'sunny-outline', color: '#FFB800' };
-  if (caloriesConsumed > calorieGoal * 0.9) return { tip: 'You\'re close to your calorie goal. Prioritise protein in your next meal to stay full and protect muscle.', icon: 'nutrition-outline', color: '#00B894' };
-  return { tip: 'Consistency over intensity. Showing up is 80% of the result — the other 20% is what you do when you\'re here.', icon: 'sparkles-outline', color: '#7C3AED' };
+  if (waterMl < 500 && hour >= 10) return { tip: 'You\'re behind on hydration. Aim for 2.5L daily — even mild dehydration drops performance by 10%.', icon: 'water-outline' };
+  if (sleepHours > 0 && sleepHours < 6) return { tip: 'Short sleep detected. Prioritise 7–9h tonight — growth hormone peaks during deep sleep.', icon: 'moon-outline' };
+  if (readinessScore < 40) return { tip: 'Low readiness today. Consider active recovery: a 20-min walk and light stretching will serve you better than heavy training.', icon: 'pulse-outline' };
+  if (stepsToday < 3000 && hour >= 14) return { tip: `Only ${stepsToday.toLocaleString()} steps so far. A 15-min walk after lunch burns ~80 kcal and improves insulin sensitivity.`, icon: 'footsteps-outline' };
+  if (streak >= 7 && streak % 7 === 0) return { tip: `${streak}-day streak! Consistency is the #1 predictor of long-term results. You're building an identity, not just a habit.`, icon: 'flame-outline' };
+  if (caloriesConsumed === 0 && hour >= 12) return { tip: 'No meals logged yet. Fuelling your training matters — protein within 2h of waking optimises muscle protein synthesis.', icon: 'restaurant-outline' };
+  if (readinessScore >= 80) return { tip: 'Readiness is optimal today. This is your window for a PR attempt or a high-intensity session — your CNS is primed.', icon: 'flash-outline' };
+  if (hour < 9) return { tip: 'Starting the day strong. 5 minutes of morning sunlight resets your circadian rhythm and boosts serotonin.', icon: 'sunny-outline' };
+  if (caloriesConsumed > calorieGoal * 0.9) return { tip: 'You\'re close to your calorie goal. Prioritise protein in your next meal to stay full and protect muscle.', icon: 'nutrition-outline' };
+  return { tip: 'Consistency over intensity. Showing up is 80% of the result — the other 20% is what you do when you\'re here.', icon: 'sparkles-outline' };
 }
 
 function ReadinessBar({ score, animScore }: { score: number; animScore: Animated.Value }) {
@@ -112,6 +113,12 @@ export default function HomeScreen() {
   const [prevReadiness, setPrevReadiness] = useState(readinessScore);
   const [readinessAnimating, setReadinessAnimating] = useState(false);
   const [tipVisible, setTipVisible] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 1000);
+  }, []);
 
   useEffect(() => {
     if (readinessAnimating && readinessScore !== prevReadiness) {
@@ -177,6 +184,7 @@ export default function HomeScreen() {
         style={[styles.container, { backgroundColor: colors.background }]}
         contentContainerStyle={{ paddingBottom: 100 + (Platform.OS === 'web' ? 0 : insets.bottom) }}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
         {/* Header */}
         <View style={[styles.header, { paddingTop: topPad + 16 }]}>
