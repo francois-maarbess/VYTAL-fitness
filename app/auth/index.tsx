@@ -11,7 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import OtpInput from "@/components/OtpInput";
 
-type AuthMode = "signIn" | "signUp" | "forgotPassword" | "forgotPasswordOtp" | "forgotPasswordNew";
+type AuthMode = "signIn" | "signUp" | "forgotPassword" | "forgotPasswordOtp" | "forgotPasswordNew" | "secondFactor";
 
 function friendlyError(err: unknown): string {
   const msg = (err as Error)?.message ?? "";
@@ -75,6 +75,7 @@ export default function AuthScreen() {
   const [error, setError] = useState("");
   const [resendTimer, setResendTimer] = useState(0);
   const [forgotEmailSent, setForgotEmailSent] = useState(false);
+  const [secondFactorCode, setSecondFactorCode] = useState("");
   const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   const { signIn, setActive: setSignInActive, isLoaded: signInLoaded } = useSignIn();
@@ -121,10 +122,19 @@ export default function AuthScreen() {
     try {
       if (mode === "signIn") {
         const result = await signIn!.create({ identifier: email, password });
-        console.log("[Auth] signIn.create status:", result.status, "sessionId:", result.createdSessionId);
+        console.log("[Auth] signIn.create status:", result.status, "sessionId:", result.createdSessionId, "secondFactors:", result.supportedSecondFactors);
         if (result.status === "complete" && result.createdSessionId && setSignInActive) {
           await setSignInActive({ session: result.createdSessionId });
           router.replace("/(tabs)");
+        } else if (result.status === "needs_second_factor") {
+          const factors = result.supportedSecondFactors ?? [];
+          if (factors.some((f: any) => f.strategy === "totp") || factors.some((f: any) => f.strategy === "phone_code")) {
+            setMode("secondFactor");
+            setSecondFactorCode("");
+            setLoading(false);
+            return;
+          }
+          setError("Multi-factor authentication required but no supported 2FA method. Contact support.");
         }
       } else {
         const username = email.split("@")[0].replace(/[^a-zA-Z0-9_-]/g, "") + Math.random().toString(36).slice(2, 6);
@@ -213,6 +223,33 @@ export default function AuthScreen() {
     try {
       await signUp!.prepareEmailAddressVerification({ strategy: "email_code" });
       startResendTimer();
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSecondFactor() {
+    if (secondFactorCode.length < 4) return;
+    setLoading(true);
+    setError("");
+    try {
+      const result = await signIn!.attemptSecondFactor({
+        strategy: "totp",
+        code: secondFactorCode,
+      }).catch(() =>
+        signIn!.attemptSecondFactor({
+          strategy: "phone_code",
+          code: secondFactorCode,
+        })
+      );
+      if (result.status === "complete" && result.createdSessionId && setSignInActive) {
+        await setSignInActive({ session: result.createdSessionId });
+        router.replace("/(tabs)");
+      } else {
+        setError("Verification failed. Try again.");
+      }
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -524,6 +561,36 @@ export default function AuthScreen() {
               {loading ? <ActivityIndicator color="#000" /> : <Text style={[styles.primaryBtnText, { color: "#000" }]}>Set New Password</Text>}
             </Pressable>
           </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // ─── 2FA screen ─────────────────────────────────────────────────────────────
+
+  if (mode === "secondFactor") {
+    return (
+      <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60 }]} keyboardShouldPersistTaps="handled">
+          <View style={styles.brand}>
+            <View style={[styles.logoCircle, { backgroundColor: `${colors.primary}20` }]}>
+              <Ionicons name="shield-checkmark-outline" size={28} color={colors.primary} />
+            </View>
+            <Text style={[styles.title, { color: colors.foreground }]}>Two-factor auth</Text>
+            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
+              Enter the verification code from your authenticator app
+            </Text>
+          </View>
+          <OtpInput value={secondFactorCode} onChange={setSecondFactorCode} onComplete={(c) => { setSecondFactorCode(c); handleSecondFactor(); }} />
+          {error ? <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}
+          <Pressable onPress={handleSecondFactor} disabled={loading || secondFactorCode.length < 4}
+            style={[styles.primaryBtn, { backgroundColor: colors.primary, opacity: loading || secondFactorCode.length < 4 ? 0.5 : 1 }]}
+          >
+            {loading ? <ActivityIndicator color="#000" /> : <Text style={[styles.primaryBtnText, { color: "#000" }]}>Verify</Text>}
+          </Pressable>
+          <Pressable onPress={() => { setMode("signIn"); setError(""); setSecondFactorCode(""); }} style={styles.resendBtn}>
+            <Text style={[styles.resendText, { color: colors.primary }]}>Back to sign in</Text>
+          </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
     );

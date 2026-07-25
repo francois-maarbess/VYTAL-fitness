@@ -16,3 +16,26 @@ yarn-error.log*
 
 expo-env.d.ts
 # @end expo-cli
+
+# Secrets
+.env
+.env.local
+.env.production
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+
+# Generated
+android/.gradle/
+android/app/build/
+android/build/
+.expo/
+*.jks
+*.keystore
+
+# Dev scripts
+start-api.bat
