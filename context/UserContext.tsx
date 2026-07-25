@@ -217,11 +217,38 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(() => setState((prev) => ({ ...prev, isLoading: false })));
 
-    // Sync from server if signed in
+    // Sync: push local data to server + pull server data
     (async () => {
       try {
         const token = await getToken();
         if (!token) return;
+
+        // Push local profile to server so a new device can pick it up
+        const localState = await AsyncStorage.getItem(STORAGE_KEY);
+        if (localState) {
+          try {
+            const parsed = JSON.parse(localState) as Partial<UserState>;
+            if (parsed.profile) {
+              const body: Record<string, unknown> = { profile: parsed.profile };
+              if (parsed.fitScore !== undefined || parsed.streak !== undefined) {
+                body.state = {
+                  fitScore: parsed.fitScore,
+                  streak: parsed.streak,
+                  totalWorkouts: parsed.totalWorkouts,
+                  xp: parsed.xp,
+                  level: parsed.level,
+                };
+              }
+              await fetch(`${getApiBaseUrl()}api/users/profile`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify(body),
+              });
+            }
+          } catch {}
+        }
+
+        // Pull server profile and merge with local
         const res = await fetch(`${getApiBaseUrl()}api/users/profile`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -229,7 +256,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         const { user } = await res.json();
         if (!user) return;
         setState((prev) => {
-          if (!prev.profile || !user.name) return prev;
+          if (!prev.profile) return prev;
           const serverProfile: UserProfile = {
             name: user.name ?? prev.profile.name,
             age: user.age ?? prev.profile.age,
