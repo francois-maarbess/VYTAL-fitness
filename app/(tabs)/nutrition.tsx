@@ -1,7 +1,17 @@
 import React, { useState } from 'react';
 import {
-  ActivityIndicator, Alert, KeyboardAvoidingView, Modal,
-  Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -10,8 +20,6 @@ import { useAuth } from '@clerk/clerk-expo';
 import { useColors } from '@/hooks/useColors';
 import { useUser } from '@/context/UserContext';
 import { MacroBar } from '@/components/MacroBar';
-import { WaterTracker } from '@/components/WaterTracker';
-import { SparkLine } from '@/components/SparkLine';
 import { Meal } from '@/data/mockData';
 import { getApiBaseUrl } from '@/lib/api';
 
@@ -23,104 +31,34 @@ interface NutritionResult {
   message: string;
 }
 
-const MEAL_ICONS: Record<Meal['mealType'], keyof typeof Ionicons.glyphMap> = {
-  breakfast: 'sunny-outline',
-  lunch: 'restaurant-outline',
-  dinner: 'moon-outline',
-  snack: 'nutrition-outline',
-};
-
 function MealRow({ meal, onDelete }: { meal: Meal; onDelete: () => void }) {
   const colors = useColors();
+  const iconMap: Record<Meal['mealType'], keyof typeof Ionicons.glyphMap> = {
+    breakfast: 'sunny-outline',
+    lunch: 'restaurant-outline',
+    dinner: 'moon-outline',
+    snack: 'nutrition-outline',
+  };
   return (
     <View style={[styles.mealRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={[styles.mealIcon, { backgroundColor: `${colors.primary}15` }]}>
-        <Ionicons name={MEAL_ICONS[meal.mealType]} size={18} color={colors.primary} />
+      <View style={[styles.mealIcon, { backgroundColor: colors.muted }]}>
+        <Ionicons name={iconMap[meal.mealType]} size={18} color={colors.mutedForeground} />
       </View>
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={{ color: colors.foreground, fontSize: 14, fontFamily: 'Inter_600SemiBold' }} numberOfLines={1}>{meal.name}</Text>
-        <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_400Regular', textTransform: 'capitalize' }}>
-          {meal.mealType} · {meal.time}
-        </Text>
+        <Text style={{ color: colors.foreground, fontSize: 14, fontFamily: 'Inter_600SemiBold' }}>{meal.name}</Text>
+        <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_400Regular' }}>{meal.time}</Text>
       </View>
-      <View style={{ alignItems: 'flex-end', gap: 2, minWidth: 90 }}>
+      <View style={{ alignItems: 'flex-end', gap: 2 }}>
         <Text style={{ color: colors.foreground, fontSize: 14, fontFamily: 'Inter_700Bold' }}>{meal.calories} kcal</Text>
         <Text style={{ color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_400Regular' }}>
-          P:{meal.protein}g C:{meal.carbs}g F:{meal.fat}g
+          P{meal.protein} C{meal.carbs} F{meal.fat}
         </Text>
       </View>
-      <Pressable onPress={onDelete} style={{ padding: 6 }}>
-        <Ionicons name="close-circle-outline" size={20} color={colors.mutedForeground} />
+      <Pressable onPress={onDelete} style={{ padding: 4 }}>
+        <Ionicons name="close-circle-outline" size={18} color={colors.mutedForeground} />
       </Pressable>
     </View>
   );
-}
-
-function ConfirmMealModal({ visible, result, onConfirm, onEdit, onCancel }: {
-  visible: boolean;
-  result: NutritionResult | null;
-  onConfirm: (result: NutritionResult) => void;
-  onEdit: (result: NutritionResult) => void;
-  onCancel: () => void;
-}) {
-  const colors = useColors();
-  if (!visible || !result) return null;
-
-  const [editable, setEditable] = useState(result);
-  const [editing, setEditing] = useState(false);
-
-  const handleSave = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    onConfirm(editable);
-  };
-
-  if (!editing) {
-    return (
-      <Modal visible transparent animationType="fade" onRequestClose={onCancel}>
-        <View style={{ flex: 1, backgroundColor: '#00000080', justifyContent: 'center', padding: 24 }}>
-          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 20 }]}>
-            <View style={{ alignItems: 'center', marginBottom: 16, gap: 8 }}>
-              <View style={[styles.mealIcon, { backgroundColor: `${colors.primary}20`, width: 48, height: 48, borderRadius: 24 }]}>
-                <Ionicons name="checkmark-circle" size={28} color={colors.primary} />
-              </View>
-              <Text style={{ color: colors.foreground, fontSize: 18, fontFamily: 'Inter_700Bold' }}>Confirm Meal</Text>
-              <Text style={{ color: colors.mutedForeground, fontSize: 13, fontFamily: 'Inter_400Regular', textAlign: 'center' }}>{editable.foodSummary}</Text>
-            </View>
-
-            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-              {[
-                { label: 'Calories', val: `${editable.macros.calories}`, color: colors.primary, unit: 'kcal' },
-                { label: 'Protein', val: `${editable.macros.protein}`, color: '#00D4FF', unit: 'g' },
-                { label: 'Carbs', val: `${editable.macros.carbs}`, color: colors.secondary, unit: 'g' },
-                { label: 'Fat', val: `${editable.macros.fat}`, color: colors.accent, unit: 'g' },
-              ].map(m => (
-                <View key={m.label} style={{ flex: 1, alignItems: 'center', backgroundColor: `${m.color}12`, borderRadius: 12, paddingVertical: 12, gap: 2 }}>
-                  <Text style={{ color: m.color, fontSize: 20, fontFamily: 'Inter_700Bold' }}>{m.val}</Text>
-                  <Text style={{ color: colors.mutedForeground, fontSize: 9, fontFamily: 'Inter_500Medium' }}>{m.unit}</Text>
-                  <Text style={{ color: colors.mutedForeground, fontSize: 9, fontFamily: 'Inter_400Regular' }}>{m.label}</Text>
-                </View>
-              ))}
-            </View>
-
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <Pressable onPress={onCancel}
-                style={{ flex: 1, height: 48, borderRadius: 14, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }}
-              >
-                <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold', fontSize: 15 }}>Cancel</Text>
-              </Pressable>
-              <Pressable onPress={handleSave}
-                style={{ flex: 1, height: 48, borderRadius: 14, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}
-              >
-                <Text style={{ color: '#000', fontFamily: 'Inter_700Bold', fontSize: 15 }}>Log Meal</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    );
-  }
-
-  return null;
 }
 
 function NLPModal({ visible, onClose, onConfirm, getToken }: {
@@ -133,110 +71,77 @@ function NLPModal({ visible, onClose, onConfirm, getToken }: {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
 
-  function estimateLocalMacros(rawInput: string): NutritionResult {
-    const lower = rawInput.toLowerCase();
-    let calories = 0;
-    let protein = 0;
-    let carbs = 0;
-    let fat = 0;
-
-    if (lower.includes('chicken') || lower.includes('turkey')) { calories += 330; protein += 45; fat += 6; }
-    if (lower.includes('rice')) { calories += 260; carbs += 55; protein += 5; }
-    if (lower.includes('egg')) { calories += 150; protein += 13; fat += 10; }
-    if (lower.includes('shake') || lower.includes('whey') || lower.includes('protein')) { calories += 200; protein += 30; carbs += 6; fat += 3; }
-    if (lower.includes('steak') || lower.includes('beef')) { calories += 420; protein += 38; fat += 28; }
-    if (lower.includes('salmon') || lower.includes('fish')) { calories += 350; protein += 34; fat += 22; }
-    if (lower.includes('oat') || lower.includes('oatmeal')) { calories += 220; carbs += 40; protein += 8; fat += 4; }
-    if (lower.includes('salad') || lower.includes('veg')) { calories += 90; carbs += 12; protein += 3; fat += 4; }
-    if (lower.includes('bread') || lower.includes('toast')) { calories += 160; carbs += 30; protein += 6; fat += 2; }
-    if (lower.includes('pasta')) { calories += 380; carbs += 70; protein += 12; fat += 4; }
-    if (lower.includes('avocado')) { calories += 160; fat += 15; carbs += 9; protein += 2; }
-    if (lower.includes('apple') || lower.includes('banana') || lower.includes('fruit')) { calories += 95; carbs += 25; }
-
-    if (calories === 0) {
-      calories = 350;
-      protein = 25;
-      carbs = 35;
-      fat = 12;
-    }
-
-    const foodSummary = rawInput.length > 35 ? rawInput.slice(0, 32) + '...' : rawInput;
-    return {
-      isValidFood: true,
-      foodSummary,
-      items: [{ name: foodSummary, weightGrams: 250, macros: { calories, protein, carbs, fat } }],
-      macros: { calories, protein, carbs, fat },
-      message: 'Logged with VYTAL AI',
-    };
-  }
-
   async function analyze() {
     if (!text.trim()) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setLoading(true);
-    let data: NutritionResult;
     try {
       const token = await getToken();
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const res = await fetch(`${getApiBaseUrl()}api/nutrition/analyze`, {
-        method: 'POST', headers, body: JSON.stringify({ text: text.trim() }),
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ text: text.trim() }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      data = await res.json();
-    } catch {
-      console.warn("[Nutrition] Remote API unreachable, fallback to local macro estimation.");
-      data = estimateLocalMacros(text.trim());
+      const data: NutritionResult = await res.json();
+      if (!data.isValidFood) {
+        Alert.alert("Hold up!", data.message || "Please enter a valid food item.");
+        return;
+      }
+      onConfirm(data);
+      Alert.alert("Meal Logged!", `${data.foodSummary}\nAdded ${data.macros.calories} kcal.`);
+      handleClose();
+    } catch (e: unknown) {
+      Alert.alert("Network Error", "Could not reach the VYTAL AI. Please check your connection.");
     } finally {
       setLoading(false);
     }
-
-    if (!data.isValidFood) {
-      Alert.alert('Hold up!', data.message || 'Please enter a valid food item.');
-      return;
-    }
-    onConfirm(data);
-    handleClose();
   }
 
-  function handleClose() { setText(''); setLoading(false); onClose(); }
+  function handleClose() {
+    setText('');
+    setLoading(false);
+    onClose();
+  }
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior="padding">
         <Pressable style={{ flex: 1 }} onPress={handleClose} />
         <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={{ alignItems: 'center', marginBottom: 16 }}>
             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border }} />
           </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Ionicons name="flash" size={18} color={colors.primary} />
-              <Text style={{ color: colors.foreground, fontSize: 17, fontFamily: 'Inter_700Bold' }}>Log Meal with AI</Text>
-            </View>
+
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <Text style={{ color: colors.foreground, fontSize: 17, fontFamily: 'Inter_700Bold' }}>Log Meal with AI</Text>
             <Pressable onPress={handleClose}><Ionicons name="close" size={22} color={colors.mutedForeground} /></Pressable>
           </View>
+
           <Text style={{ color: colors.mutedForeground, fontSize: 13, fontFamily: 'Inter_400Regular', marginBottom: 12, lineHeight: 18 }}>
-            Describe exactly what you ate — VYTAL AI calculates the macros instantly.
+            Type exactly what you ate — VYTAL ai will calculate the macros.
           </Text>
+
           <View style={[styles.nlpInputWrap, { backgroundColor: colors.muted, borderColor: colors.border }]}>
             <TextInput
-              value={text} onChangeText={setText}
-              placeholder='e.g. "500g chicken breast, 200g white rice, side salad"'
+              value={text}
+              onChangeText={setText}
+              placeholder='e.g. "500g chicken breast, 200g white rice, salad"'
               placeholderTextColor={colors.mutedForeground}
               style={{ color: colors.foreground, fontSize: 14, fontFamily: 'Inter_400Regular', minHeight: 70, textAlignVertical: 'top' }}
-              multiline autoFocus
+              multiline
+              autoFocus
             />
           </View>
+
           <Pressable onPress={analyze} disabled={!text.trim() || loading}
             style={[styles.analyzeBtn, { backgroundColor: text.trim() && !loading ? colors.primary : colors.muted }]}
           >
-            {loading
-              ? <ActivityIndicator size="small" color="#000" />
-              : <Ionicons name="flash" size={16} color={text.trim() ? '#000' : colors.mutedForeground} />
-            }
-            <Text style={{ color: text.trim() && !loading ? '#000' : colors.mutedForeground, fontFamily: 'Inter_700Bold', fontSize: 15 }}>
-              {loading ? 'Analyzing...' : 'Analyze with AI'}
+            {loading ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Ionicons name="flash" size={16} color={text.trim() ? colors.primaryForeground : colors.mutedForeground} />}
+            <Text style={{ color: text.trim() && !loading ? colors.primaryForeground : colors.mutedForeground, fontFamily: 'Inter_600SemiBold', fontSize: 15 }}>
+              {loading ? 'Analysing...' : 'Analyse with AI'}
             </Text>
           </Pressable>
         </View>
@@ -245,69 +150,13 @@ function NLPModal({ visible, onClose, onConfirm, getToken }: {
   );
 }
 
-// ─── Weekly sparkline row ────────────────────────────────────────────────────
-
-function WeeklyMacroSparklines({ data }: { data: { calories: number; protein: number; carbs: number; fat: number }[] }) {
-  const colors = useColors();
-  if (!data || data.length === 0) return null;
-
-  const macros = [
-    { key: 'calories' as const, label: 'Calories', color: colors.primary },
-    { key: 'protein' as const, label: 'Protein', color: '#00D4FF' },
-    { key: 'carbs' as const, label: 'Carbs', color: colors.secondary },
-    { key: 'fat' as const, label: 'Fat', color: colors.accent },
-  ];
-
-  return (
-    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <Text style={{ color: colors.foreground, fontSize: 16, fontFamily: 'Inter_700Bold', marginBottom: 4 }}>Weekly Trends</Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-        {macros.map(({ key, label, color }) => {
-          const values = [...data].reverse().map(d => d[key]);
-          const latest = values[values.length - 1] ?? 0;
-          const prev = values[values.length - 2] ?? latest;
-          const delta = latest - prev;
-          return (
-            <View key={key} style={{ flex: 1, minWidth: '45%', gap: 6 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_500Medium' }}>{label}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-                  <Ionicons
-                    name={delta > 0 ? 'trending-up-outline' : delta < 0 ? 'trending-down-outline' : 'remove-outline'}
-                    size={12}
-                    color={key === 'calories' ? (delta > 0 ? colors.destructive : colors.primary) : (delta > 0 ? colors.primary : colors.mutedForeground)}
-                  />
-                  <Text style={{ color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_400Regular' }}>
-                    {delta >= 0 ? '+' : ''}{Math.round(delta)}{key === 'calories' ? '' : 'g'}
-                  </Text>
-                </View>
-              </View>
-              <SparkLine data={values.length > 1 ? values : [0, latest]} width={120} height={36} color={color} />
-            </View>
-          );
-        })}
-      </View>
-      <Text style={{ color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_400Regular' }}>
-        Last {data.length} day{data.length !== 1 ? 's' : ''} of logged data
-      </Text>
-    </View>
-  );
-}
-
 export default function NutritionScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { getToken } = useAuth();
-  const {
-    nutritionToday, updateNutrition, profile, calorieGoal, bmr,
-    sleepHours, setSleepHours, sleepQuality, setSleepQuality,
-    stepsToday, setStepsToday, waterMl, addWaterMl, setWaterMl,
-    weeklyNutrition,
-  } = useUser();
+  const { nutritionToday, updateNutrition, profile, calorieGoal, bmr, sleepHours, setSleepHours, sleepQuality, setSleepQuality, stepsToday, setStepsToday } = useUser();
   const [meals, setMeals] = useState<Meal[]>([]);
   const [nlpVisible, setNlpVisible] = useState(false);
-  const [pendingMeal, setPendingMeal] = useState<NutritionResult | null>(null);
-  const [confirmVisible, setConfirmVisible] = useState(false);
   const topPad = Platform.OS === 'web' ? 60 : insets.top;
 
   const totals = {
@@ -322,19 +171,18 @@ export default function NutritionScreen() {
     fat: Math.round((calorieGoal * 0.25) / 9),
   };
 
-  function handleNlpResult(result: NutritionResult) {
-    setPendingMeal(result);
-    setConfirmVisible(true);
-  }
-
-  function handleConfirmMeal(result: NutritionResult) {
-    setConfirmVisible(false);
-    setPendingMeal(null);
+  function handleNlpConfirm(result: { foodSummary: string | null; macros: { calories: number; protein: number; carbs: number; fat: number } }) {
     const now = new Date();
     const h = now.getHours();
     const timeStr = `${h % 12 || 12}:${now.getMinutes().toString().padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
     const mealType: Meal['mealType'] = h < 11 ? 'breakfast' : h < 15 ? 'lunch' : h < 18 ? 'snack' : 'dinner';
-    const meal: Meal = { id: `nlp-${Date.now()}`, name: result.foodSummary ?? 'Meal', time: timeStr, mealType, ...result.macros };
+    const meal: Meal = {
+      id: `nlp-${Date.now()}`,
+      name: result.foodSummary ?? 'Meal',
+      time: timeStr,
+      mealType,
+      ...result.macros,
+    };
     setMeals(prev => [...prev, meal]);
     updateNutrition(result.macros);
   }
@@ -350,9 +198,6 @@ export default function NutritionScreen() {
       })()))
     : null;
 
-  const caloriesPct = Math.min((totals.calories / calorieGoal) * 100, 100);
-  const calColor = totals.calories > calorieGoal ? colors.destructive : caloriesPct > 85 ? '#FFB800' : colors.primary;
-
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -360,18 +205,18 @@ export default function NutritionScreen() {
       showsVerticalScrollIndicator={false}
     >
       {/* Header */}
-      <View style={{ paddingTop: topPad + 16, paddingHorizontal: 20, marginBottom: 20 }}>
+      <View style={{ paddingTop: topPad + 16, paddingHorizontal: 20, gap: 4, marginBottom: 20 }}>
         <Text style={{ color: colors.foreground, fontSize: 28, fontFamily: 'Inter_700Bold', letterSpacing: -0.5 }}>Nutrition</Text>
         <Text style={{ color: colors.mutedForeground, fontSize: 13, fontFamily: 'Inter_400Regular' }}>
           {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
         </Text>
       </View>
 
-      {/* Calorie ring + summary */}
+      {/* Calorie summary */}
       <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
         <View style={[styles.calorieCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <View style={{ flex: 1 }}>
+            <View>
               <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_600SemiBold', letterSpacing: 0.8 }}>CALORIES TODAY</Text>
               <Text style={{ color: colors.foreground, fontSize: 40, fontFamily: 'Inter_700Bold', letterSpacing: -1, marginTop: 2 }}>
                 {totals.calories}
@@ -379,35 +224,21 @@ export default function NutritionScreen() {
               </Text>
               {profile && <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 2 }}>BMR {Math.round(bmr)} kcal</Text>}
             </View>
-            <View style={[styles.remainBox, { backgroundColor: `${calColor}15`, borderColor: `${calColor}33` }]}>
-              <Text style={{ color: calColor, fontSize: 10, fontFamily: 'Inter_600SemiBold' }}>
-                {totals.calories > calorieGoal ? 'OVER' : 'LEFT'}
-              </Text>
-              <Text style={{ color: calColor, fontSize: 22, fontFamily: 'Inter_700Bold' }}>
-                {Math.abs(calorieGoal - totals.calories)}
-              </Text>
+            <View style={[styles.remainBox, { backgroundColor: `${colors.primary}15`, borderColor: `${colors.primary}33` }]}>
+              <Text style={{ color: colors.primary, fontSize: 10, fontFamily: 'Inter_600SemiBold' }}>LEFT</Text>
+              <Text style={{ color: colors.primary, fontSize: 22, fontFamily: 'Inter_700Bold' }}>{Math.max(0, calorieGoal - totals.calories)}</Text>
             </View>
           </View>
           <View style={[styles.bar, { backgroundColor: colors.border }]}>
-            <View style={[styles.barFill, { width: `${caloriesPct}%` as `${number}%`, backgroundColor: calColor }]} />
-          </View>
-          {/* Macro mini badges */}
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            {[
-              { label: 'Protein', val: totals.protein, color: colors.primary },
-              { label: 'Carbs', val: totals.carbs, color: colors.secondary },
-              { label: 'Fat', val: totals.fat, color: colors.accent },
-            ].map(m => (
-              <View key={m.label} style={{ flex: 1, alignItems: 'center', backgroundColor: `${m.color}10`, borderRadius: 8, paddingVertical: 6 }}>
-                <Text style={{ color: m.color, fontSize: 14, fontFamily: 'Inter_700Bold' }}>{m.val}g</Text>
-                <Text style={{ color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_400Regular' }}>{m.label}</Text>
-              </View>
-            ))}
+            <View style={[styles.barFill, {
+              width: `${Math.min((totals.calories / calorieGoal) * 100, 100)}%` as `${number}%`,
+              backgroundColor: totals.calories > calorieGoal ? colors.destructive : colors.primary,
+            }]} />
           </View>
         </View>
       </View>
 
-      {/* Macronutrients */}
+      {/* Macros */}
       <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={{ color: colors.foreground, fontSize: 16, fontFamily: 'Inter_700Bold', marginBottom: 4 }}>Macronutrients</Text>
@@ -417,23 +248,11 @@ export default function NutritionScreen() {
         </View>
       </View>
 
-      {/* Water Tracker */}
-      <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <WaterTracker
-            waterMl={waterMl}
-            onAdd={addWaterMl}
-            onRemove={(ml) => setWaterMl(Math.max(0, waterMl - ml))}
-          />
-        </View>
-      </View>
-
-      {/* Daily Inputs — sleep & steps */}
+      {/* Daily inputs — sleep & steps */}
       <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={{ color: colors.foreground, fontSize: 16, fontFamily: 'Inter_700Bold', marginBottom: 4 }}>Daily Inputs</Text>
           <View style={{ flexDirection: 'row', gap: 12 }}>
-            {/* Sleep */}
             <View style={{ flex: 1, gap: 6 }}>
               <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_600SemiBold', letterSpacing: 0.8 }}>SLEEP (hours)</Text>
               <View style={[styles.inputRow, { backgroundColor: colors.muted, borderColor: colors.border }]}>
@@ -441,17 +260,20 @@ export default function NutritionScreen() {
                 <TextInput
                   value={sleepHours > 0 ? String(sleepHours) : ''}
                   onChangeText={v => { const n = parseFloat(v); if (!isNaN(n) && n >= 0 && n <= 24) setSleepHours(n); else if (v === '' || v === '0') setSleepHours(0); }}
-                  keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.mutedForeground}
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                  placeholderTextColor={colors.mutedForeground}
                   style={{ flex: 1, color: colors.foreground, fontSize: 18, fontFamily: 'Inter_700Bold' }}
                 />
-                <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>hrs</Text>
+                <Text style={{ color: colors.mutedForeground, fontSize: 12, fontFamily: 'Inter_400Regular' }}>hrs</Text>
               </View>
               {sleepHours > 0 && (
                 <Text style={{ color: sleepHours >= 7 ? colors.primary : sleepHours >= 6 ? '#FFB800' : colors.destructive, fontSize: 11, fontFamily: 'Inter_500Medium' }}>
-                  {sleepHours >= 8 ? 'Excellent recovery' : sleepHours >= 7 ? 'Good recovery' : sleepHours >= 6 ? 'Moderate' : 'Low — aim for 7–9h'}
+                  {sleepHours >= 8 ? 'Excellent recovery' : sleepHours >= 7 ? 'Good recovery' : sleepHours >= 6 ? 'Moderate — aim for 7–9h' : 'Low — readiness will drop'}
                 </Text>
               )}
-              <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+              {/* Sleep quality selector */}
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: 2 }}>
                 {(['poor', 'fair', 'good', 'excellent'] as const).map(q => {
                   const active = sleepQuality === q;
                   const qColor = q === 'excellent' ? colors.primary : q === 'good' ? '#00B894' : q === 'fair' ? '#FFB800' : colors.destructive;
@@ -465,7 +287,6 @@ export default function NutritionScreen() {
                 })}
               </View>
             </View>
-            {/* Steps */}
             <View style={{ flex: 1, gap: 6 }}>
               <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_600SemiBold', letterSpacing: 0.8 }}>STEPS TODAY</Text>
               <View style={[styles.inputRow, { backgroundColor: colors.muted, borderColor: colors.border }]}>
@@ -473,40 +294,31 @@ export default function NutritionScreen() {
                 <TextInput
                   value={stepsToday > 0 ? String(stepsToday) : ''}
                   onChangeText={v => { const n = parseInt(v.replace(/[^0-9]/g, ''), 10); if (!isNaN(n)) setStepsToday(n); else if (v === '') setStepsToday(0); }}
-                  keyboardType="numeric" placeholder="0" placeholderTextColor={colors.mutedForeground}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  placeholderTextColor={colors.mutedForeground}
                   style={{ flex: 1, color: colors.foreground, fontSize: 18, fontFamily: 'Inter_700Bold' }}
                 />
               </View>
               {stepsToday > 0 && (
                 <Text style={{ color: stepsToday >= 8000 ? colors.primary : '#FFB800', fontSize: 11, fontFamily: 'Inter_500Medium' }}>
-                  {stepsToday >= 10000 ? '🎯 Goal reached!' : stepsToday >= 8000 ? '✓ Active' : `${(8000 - stepsToday).toLocaleString()} to goal`}
+                  {stepsToday >= 10000 ? 'Goal reached!' : stepsToday >= 8000 ? 'Active' : `${(8000 - stepsToday).toLocaleString()} to goal`}
                 </Text>
               )}
-              {/* Step quick add */}
-              <View style={{ flexDirection: 'row', gap: 4 }}>
-                {[2000, 5000, 8000].map(s => (
-                  <Pressable key={s} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setStepsToday(s); }}
-                    style={[styles.qualityChip, { backgroundColor: stepsToday === s ? `${colors.secondary}20` : 'transparent', borderColor: stepsToday === s ? colors.secondary : colors.border }]}
-                  >
-                    <Text style={{ color: stepsToday === s ? colors.secondary : colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_500Medium' }}>{s >= 1000 ? `${s / 1000}k` : s}</Text>
-                  </Pressable>
-                ))}
-              </View>
             </View>
           </View>
         </View>
       </View>
 
-      {/* Today's Meals */}
+      {/* Meals */}
       <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <Text style={{ color: colors.foreground, fontSize: 18, fontFamily: 'Inter_700Bold' }}>Today's Meals</Text>
-          <Pressable
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setNlpVisible(true); }}
+          <Pressable onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setNlpVisible(true); }}
             style={[styles.logBtn, { backgroundColor: colors.primary }]}
           >
-            <Ionicons name="add" size={16} color="#000" />
-            <Text style={{ color: '#000', fontFamily: 'Inter_700Bold', fontSize: 13 }}>Log with AI</Text>
+            <Ionicons name="add" size={16} color={colors.primaryForeground} />
+            <Text style={{ color: colors.primaryForeground, fontFamily: 'Inter_600SemiBold', fontSize: 13 }}>Log with AI</Text>
           </Pressable>
         </View>
         <View style={{ gap: 8 }}>
@@ -515,24 +327,16 @@ export default function NutritionScreen() {
             <Pressable onPress={() => setNlpVisible(true)}
               style={[styles.emptyState, { backgroundColor: colors.card, borderColor: colors.border }]}
             >
-              <Ionicons name="restaurant-outline" size={32} color={colors.mutedForeground} />
+              <Ionicons name="restaurant-outline" size={30} color={colors.mutedForeground} />
               <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_500Medium', fontSize: 14 }}>Tap to log your first meal</Text>
-              <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_400Regular', fontSize: 12 }}>AI calculates macros instantly</Text>
             </Pressable>
           )}
         </View>
       </View>
 
-      {/* Weekly Sparklines */}
-      {weeklyNutrition.length > 0 && (
-        <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
-          <WeeklyMacroSparklines data={weeklyNutrition} />
-        </View>
-      )}
-
       {/* Bio Age */}
       {profile && bioAge !== null && (
-        <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
+        <View style={{ paddingHorizontal: 20 }}>
           <View style={[styles.bioCard, { backgroundColor: colors.card, borderColor: `${colors.accent}55` }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Ionicons name="pulse-outline" size={20} color={colors.accent} />
@@ -561,14 +365,7 @@ export default function NutritionScreen() {
         </View>
       )}
 
-      <NLPModal visible={nlpVisible} onClose={() => setNlpVisible(false)} onConfirm={handleNlpResult} getToken={getToken} />
-      <ConfirmMealModal
-        visible={confirmVisible}
-        result={pendingMeal}
-        onConfirm={handleConfirmMeal}
-        onEdit={(r) => { setPendingMeal(r); }}
-        onCancel={() => { setConfirmVisible(false); setPendingMeal(null); }}
-      />
+      <NLPModal visible={nlpVisible} onClose={() => setNlpVisible(false)} onConfirm={handleNlpConfirm} getToken={getToken} />
     </ScrollView>
   );
 }
@@ -580,15 +377,18 @@ const styles = StyleSheet.create({
   remainBox: { borderRadius: 12, borderWidth: 1, padding: 10, alignItems: 'center', minWidth: 70 },
   bar: { height: 8, borderRadius: 4, overflow: 'hidden' },
   barFill: { height: '100%', borderRadius: 4 },
-  logBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20 },
+  logBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 },
   mealRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, borderWidth: 1 },
   mealIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  emptyState: { alignItems: 'center', gap: 6, paddingVertical: 32, borderRadius: 14, borderWidth: 1, borderStyle: 'dashed' },
+  emptyState: { alignItems: 'center', gap: 8, paddingVertical: 30, borderRadius: 14, borderWidth: 1, borderStyle: 'dashed' },
   bioCard: { borderRadius: 16, borderWidth: 1, padding: 16 },
   ageBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
   qualityChip: { flex: 1, paddingVertical: 5, borderRadius: 8, borderWidth: 1, alignItems: 'center' },
   modalCard: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, padding: 20 },
   nlpInputWrap: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 12 },
-  analyzeBtn: { height: 52, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  resultCard: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 4, gap: 2 },
+  divider: { height: 1, marginVertical: 8 },
+  analyzeBtn: { height: 48, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  errorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 10, borderRadius: 10, borderWidth: 1, marginBottom: 10 },
 });

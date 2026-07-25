@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, useColorScheme, View } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
 import { Redirect, Tabs } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
@@ -7,18 +7,16 @@ import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { SymbolView } from 'expo-symbols';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useUser } from '@/context/UserContext';
 
 export default function TabLayout() {
-  const { isLoaded: clerkLoaded, isSignedIn } = useAuth();
-  const { isLoading: userLoading, profile } = useUser();
+  const { isLoaded, isSignedIn } = useAuth();
   const colors = useColors();
+  const colorScheme = useColorScheme();
   const isIOS = Platform.OS === 'ios';
   const isWeb = Platform.OS === 'web';
   const insets = useSafeAreaInsets();
 
-  // Single authoritative gate: wait for BOTH Clerk and UserContext
-  if (!clerkLoaded || userLoading) {
+  if (!isLoaded) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -27,12 +25,7 @@ export default function TabLayout() {
   }
 
   if (!isSignedIn) {
-    return <Redirect href="/auth" />;
-  }
-
-  // Onboarding guard — new users who haven't completed onboarding
-  if (!profile || !profile.onboardingComplete) {
-    return <Redirect href="/onboarding" />;
+    return <Redirect href={'/auth' as never} />;
   }
 
   return (

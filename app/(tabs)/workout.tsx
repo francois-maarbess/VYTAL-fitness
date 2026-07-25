@@ -1,302 +1,104 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, FlatList, Modal, Platform, Pressable, ScrollView,
-  StyleSheet, Text, TextInput, View,
+  Alert,
+  FlatList,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, FadeInDown } from 'react-native-reanimated';
-import Svg, { Circle } from 'react-native-svg';
+import BottomSheet, { BottomSheetBackdrop, BottomSheetFlatList, BottomSheetView } from '@gorhom/bottom-sheet';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useUser } from '@/context/UserContext';
-import { WorkoutCard } from '@/components/WorkoutCard';
-import { TodayWorkoutView } from '@/components/TodayWorkoutView';
-import { useWorkoutStore } from '@/stores/workoutStore';
-import { Workout, WORKOUTS } from '@/data/mockData';
+import { getApiBaseUrl, getAuthHeaders } from '@/lib/api';
+import { Exercise, Workout, WORKOUTS } from '@/data/mockData';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const PLAN_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const CATEGORY_FILTERS = ['All', 'Bodybuilding', 'Calisthenics', 'Basketball', 'Football', 'Tennis', 'Cardio', 'Mobility'];
 
-// ─── Exercise Database ───────────────────────────────────────────────────────
-
-interface ExerciseEntry {
+type LibraryExercise = {
+  id: number | string;
   name: string;
-  muscle: string;
+  category: string;
+  targetMuscle: string;
   equipment: string;
-  sets: string;
-  reps: string;
-  rest: string;
-  difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
-  tip: string;
+  primaryMuscles?: string[];
+  estimatedCaloriesPerMinute?: number;
+};
+
+type AddTarget = { day: string; replaceIndex?: number };
+
+const fallbackLibrary: LibraryExercise[] = WORKOUTS.flatMap((workout) =>
+  workout.exercises.map((exercise, index) => ({
+    id: `${workout.id}-${index}`,
+    name: exercise.name,
+    category: workout.type,
+    targetMuscle: exercise.muscleGroup,
+    equipment: 'Mixed',
+    primaryMuscles: [exercise.muscleGroup],
+    estimatedCaloriesPerMinute: 6,
+  })),
+);
+
+function normalizeWorkout(day: string, workout?: Partial<Workout> | null): Workout {
+  if (workout?.name && Array.isArray(workout.exercises)) {
+    const type = (workout as Workout & { category?: string }).type ?? (workout as Workout & { category?: string }).category ?? 'Strength';
+    return {
+      id: workout.id ?? day.toLowerCase().slice(0, 3),
+      name: workout.name,
+      type,
+      duration: workout.duration ?? Math.max(25, workout.exercises.length * 8),
+      difficulty: workout.difficulty ?? 'Intermediate',
+      exercises: workout.exercises,
+      muscleGroups: workout.muscleGroups ?? Array.from(new Set(workout.exercises.map((e) => e.muscleGroup))),
+      calories: workout.calories ?? Math.max(120, workout.exercises.length * 55),
+    };
+  }
+
+  const fallback = WORKOUTS[PLAN_DAYS.indexOf(day) % WORKOUTS.length];
+  return { ...fallback, id: day.toLowerCase().slice(0, 3), name: day === 'Sunday' ? 'Recovery' : fallback.name };
 }
 
-const EXERCISE_DB: ExerciseEntry[] = [
-  // Chest
-  { name: 'Bench Press', muscle: 'Chest', equipment: 'Barbell', sets: '4', reps: '8–10', rest: '90s', difficulty: 'Intermediate', tip: 'Keep shoulder blades retracted and feet flat on floor.' },
-  { name: 'Incline Dumbbell Press', muscle: 'Chest', equipment: 'Dumbbells', sets: '3', reps: '10–12', rest: '75s', difficulty: 'Intermediate', tip: 'Set bench at 30–45°. Control the descent.' },
-  { name: 'Dumbbell Fly', muscle: 'Chest', equipment: 'Dumbbells', sets: '3', reps: '12–15', rest: '60s', difficulty: 'Beginner', tip: 'Slight bend in elbows. Squeeze at the top.' },
-  { name: 'Cable Crossover', muscle: 'Chest', equipment: 'Cable', sets: '3', reps: '12–15', rest: '60s', difficulty: 'Intermediate', tip: 'Lean slightly forward and cross hands at peak contraction.' },
-  { name: 'Push-ups', muscle: 'Chest', equipment: 'Bodyweight', sets: '4', reps: '15–20', rest: '60s', difficulty: 'Beginner', tip: 'Keep core tight and body in a straight line.' },
-  { name: 'Decline Bench Press', muscle: 'Chest', equipment: 'Barbell', sets: '3', reps: '8–10', rest: '90s', difficulty: 'Intermediate', tip: 'Targets lower chest. Use a spotter.' },
-  // Back
-  { name: 'Deadlift', muscle: 'Back', equipment: 'Barbell', sets: '4', reps: '5–6', rest: '120s', difficulty: 'Advanced', tip: 'Brace core, neutral spine. Push the floor away.' },
-  { name: 'Pull-ups', muscle: 'Back', equipment: 'Bodyweight', sets: '4', reps: '6–8', rest: '90s', difficulty: 'Intermediate', tip: 'Full hang at bottom, chin over bar at top.' },
-  { name: 'Barbell Row', muscle: 'Back', equipment: 'Barbell', sets: '4', reps: '8–10', rest: '90s', difficulty: 'Intermediate', tip: 'Hinge at hips, pull to lower chest.' },
-  { name: 'Cable Row', muscle: 'Back', equipment: 'Cable', sets: '3', reps: '10–12', rest: '75s', difficulty: 'Beginner', tip: 'Keep torso upright. Drive elbows back.' },
-  { name: 'Lat Pulldown', muscle: 'Back', equipment: 'Cable', sets: '3', reps: '10–12', rest: '75s', difficulty: 'Beginner', tip: 'Pull to upper chest, not behind neck.' },
-  { name: 'Face Pulls', muscle: 'Back', equipment: 'Cable', sets: '3', reps: '15–20', rest: '60s', difficulty: 'Beginner', tip: 'Pull toward face, rotate hands outward at peak.' },
-  { name: 'Dumbbell Row', muscle: 'Back', equipment: 'Dumbbells', sets: '3', reps: '10–12', rest: '75s', difficulty: 'Beginner', tip: 'Support with same-side knee and hand on bench.' },
-  // Shoulders
-  { name: 'Overhead Press', muscle: 'Shoulders', equipment: 'Barbell', sets: '4', reps: '6–8', rest: '90s', difficulty: 'Intermediate', tip: 'Press directly overhead, slight back lean is ok.' },
-  { name: 'Dumbbell Press', muscle: 'Shoulders', equipment: 'Dumbbells', sets: '3', reps: '10–12', rest: '75s', difficulty: 'Beginner', tip: 'Control the descent. Stop at ear level.' },
-  { name: 'Lateral Raises', muscle: 'Shoulders', equipment: 'Dumbbells', sets: '4', reps: '12–15', rest: '60s', difficulty: 'Beginner', tip: 'Slight bend in elbow, lead with pinkies.' },
-  { name: 'Front Raises', muscle: 'Shoulders', equipment: 'Dumbbells', sets: '3', reps: '12–15', rest: '60s', difficulty: 'Beginner', tip: 'Alternate arms. Control the lowering.' },
-  { name: 'Arnold Press', muscle: 'Shoulders', equipment: 'Dumbbells', sets: '3', reps: '10–12', rest: '75s', difficulty: 'Intermediate', tip: 'Start palms facing you, rotate as you press.' },
-  // Biceps
-  { name: 'Barbell Curl', muscle: 'Biceps', equipment: 'Barbell', sets: '3', reps: '10–12', rest: '60s', difficulty: 'Beginner', tip: 'Don\'t swing. Squeeze at the top.' },
-  { name: 'Hammer Curls', muscle: 'Biceps', equipment: 'Dumbbells', sets: '3', reps: '12–15', rest: '60s', difficulty: 'Beginner', tip: 'Neutral grip, alternate arms for more time under tension.' },
-  { name: 'Incline Dumbbell Curl', muscle: 'Biceps', equipment: 'Dumbbells', sets: '3', reps: '10–12', rest: '60s', difficulty: 'Intermediate', tip: 'Full stretch at bottom for maximum range of motion.' },
-  { name: 'Cable Curl', muscle: 'Biceps', equipment: 'Cable', sets: '3', reps: '12–15', rest: '60s', difficulty: 'Beginner', tip: 'Constant tension throughout full range.' },
-  // Triceps
-  { name: 'Tricep Pushdown', muscle: 'Triceps', equipment: 'Cable', sets: '3', reps: '12–15', rest: '60s', difficulty: 'Beginner', tip: 'Keep elbows at sides, full extension at bottom.' },
-  { name: 'Skull Crushers', muscle: 'Triceps', equipment: 'Barbell', sets: '3', reps: '10–12', rest: '60s', difficulty: 'Intermediate', tip: 'Lower to forehead slowly, press with triceps.' },
-  { name: 'Overhead Tricep Extension', muscle: 'Triceps', equipment: 'Dumbbells', sets: '3', reps: '12–15', rest: '60s', difficulty: 'Beginner', tip: 'Keep upper arms perpendicular to floor.' },
-  { name: 'Dips', muscle: 'Triceps', equipment: 'Bodyweight', sets: '4', reps: '10–15', rest: '75s', difficulty: 'Intermediate', tip: 'Slight forward lean for chest, upright for triceps.' },
-  // Legs
-  { name: 'Squat', muscle: 'Quads', equipment: 'Barbell', sets: '5', reps: '5', rest: '120s', difficulty: 'Advanced', tip: 'Depth below parallel. Knees tracking over toes.' },
-  { name: 'Romanian Deadlift', muscle: 'Hamstrings', equipment: 'Barbell', sets: '4', reps: '8–10', rest: '90s', difficulty: 'Intermediate', tip: 'Hinge at hips, feel the hamstring stretch.' },
-  { name: 'Leg Press', muscle: 'Quads', equipment: 'Machine', sets: '3', reps: '12–15', rest: '90s', difficulty: 'Beginner', tip: 'Don\'t lock knees at top. Full range of motion.' },
-  { name: 'Bulgarian Split Squat', muscle: 'Quads', equipment: 'Dumbbells', sets: '3', reps: '10–12', rest: '75s', difficulty: 'Advanced', tip: 'Keep front knee behind toes. Upright torso.' },
-  { name: 'Leg Curl', muscle: 'Hamstrings', equipment: 'Machine', sets: '3', reps: '12–15', rest: '75s', difficulty: 'Beginner', tip: 'Slow on the way down for more hypertrophy.' },
-  { name: 'Hip Thrust', muscle: 'Glutes', equipment: 'Barbell', sets: '4', reps: '12–15', rest: '75s', difficulty: 'Intermediate', tip: 'Full hip extension at top. Tuck chin.' },
-  { name: 'Walking Lunges', muscle: 'Quads', equipment: 'Dumbbells', sets: '3', reps: '12 each', rest: '75s', difficulty: 'Intermediate', tip: 'Long stride, back knee almost touches floor.' },
-  { name: 'Calf Raise', muscle: 'Calves', equipment: 'Machine', sets: '4', reps: '15–20', rest: '45s', difficulty: 'Beginner', tip: 'Full range — all the way up and down.' },
-  // Core
-  { name: 'Plank', muscle: 'Core', equipment: 'Bodyweight', sets: '3', reps: '60s hold', rest: '45s', difficulty: 'Beginner', tip: 'Squeeze glutes and abs. Don\'t let hips sag.' },
-  { name: 'Cable Crunch', muscle: 'Core', equipment: 'Cable', sets: '3', reps: '15–20', rest: '45s', difficulty: 'Beginner', tip: 'Round the spine, initiate with abs not arms.' },
-  { name: 'Dead Bug', muscle: 'Core', equipment: 'Bodyweight', sets: '3', reps: '10 each', rest: '45s', difficulty: 'Beginner', tip: 'Lower back pressed to floor throughout.' },
-  { name: 'Hanging Leg Raise', muscle: 'Core', equipment: 'Bodyweight', sets: '3', reps: '10–15', rest: '60s', difficulty: 'Intermediate', tip: 'Control the swing. Pull knees to chest.' },
-  { name: 'Russian Twists', muscle: 'Core', equipment: 'Bodyweight', sets: '3', reps: '20', rest: '45s', difficulty: 'Beginner', tip: 'Lean back slightly, feet off floor for harder version.' },
-  // Cardio
-  { name: 'Burpees', muscle: 'Full Body', equipment: 'Bodyweight', sets: '4', reps: '30s on / 15s off', rest: '15s', difficulty: 'Advanced', tip: 'Jump explosively. Modify by stepping instead of jumping.' },
-  { name: 'Jump Rope', muscle: 'Cardio', equipment: 'Bodyweight', sets: '5', reps: '60s', rest: '30s', difficulty: 'Intermediate', tip: 'Stay on the balls of your feet. Small jumps.' },
-  { name: 'Mountain Climbers', muscle: 'Full Body', equipment: 'Bodyweight', sets: '4', reps: '30s on / 15s off', rest: '15s', difficulty: 'Intermediate', tip: 'Keep hips level, drive knees to chest.' },
-];
-
-const MUSCLE_GROUPS = ['All', ...Array.from(new Set(EXERCISE_DB.map(e => e.muscle))).sort()];
-const DIFFICULTY_COLORS = { Beginner: '#00B894', Intermediate: '#FFB800', Advanced: '#FF6B35' };
-
-// ─── Exercise Library Modal ──────────────────────────────────────────────────
-
-function ExerciseLibrary({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const colors = useColors();
-  const insets = useSafeAreaInsets();
-  const [search, setSearch] = useState('');
-  const [muscleFilter, setMuscleFilter] = useState('All');
-  const [selected, setSelected] = useState<ExerciseEntry | null>(null);
-
-  const filtered = useMemo(() =>
-    EXERCISE_DB.filter(e => {
-      const matchMuscle = muscleFilter === 'All' || e.muscle === muscleFilter;
-      const matchSearch = !search.trim() || e.name.toLowerCase().includes(search.toLowerCase()) || e.muscle.toLowerCase().includes(search.toLowerCase());
-      return matchMuscle && matchSearch;
-    }),
-  [search, muscleFilter]);
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={[styles.libraryContainer, { backgroundColor: colors.background }]}>
-        {/* Header */}
-        <View style={[styles.libraryHeader, { paddingTop: insets.top + 16, borderBottomColor: colors.border }]}>
-          <View>
-            <Text style={{ color: colors.foreground, fontSize: 20, fontFamily: 'Inter_700Bold' }}>Exercise Library</Text>
-            <Text style={{ color: colors.mutedForeground, fontSize: 13, fontFamily: 'Inter_400Regular' }}>{EXERCISE_DB.length} exercises</Text>
-          </View>
-          <Pressable onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-            <Ionicons name="close" size={20} color={colors.foreground} />
-          </Pressable>
-        </View>
-
-        {/* Search */}
-        <View style={{ paddingHorizontal: 20, paddingVertical: 12, gap: 12 }}>
-          <View style={[styles.searchBar, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-            <Ionicons name="search-outline" size={18} color={colors.mutedForeground} />
-            <TextInput
-              value={search} onChangeText={setSearch}
-              placeholder="Search exercises, muscles..."
-              placeholderTextColor={colors.mutedForeground}
-              style={{ flex: 1, color: colors.foreground, fontSize: 15, fontFamily: 'Inter_400Regular' }}
-            />
-            {search.length > 0 && (
-              <Pressable onPress={() => setSearch('')}>
-                <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
-              </Pressable>
-            )}
-          </View>
-
-          {/* Muscle filter chips */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {MUSCLE_GROUPS.map(m => (
-              <Pressable key={m} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setMuscleFilter(m); }}
-                style={[styles.filterChip, {
-                  backgroundColor: muscleFilter === m ? colors.primary : `${colors.primary}10`,
-                  borderColor: muscleFilter === m ? colors.primary : `${colors.primary}30`,
-                }]}
-              >
-                <Text style={{ color: muscleFilter === m ? '#000' : colors.mutedForeground, fontSize: 12, fontFamily: muscleFilter === m ? 'Inter_700Bold' : 'Inter_500Medium' }}>{m}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Exercise list */}
-        <FlatList
-          data={filtered}
-          keyExtractor={e => e.name}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 20, gap: 8 }}
-          showsVerticalScrollIndicator={false}
-          renderItem={({ item: ex }) => (
-            <Pressable
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSelected(ex); }}
-              style={[styles.exerciseCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-            >
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text style={{ color: colors.foreground, fontSize: 15, fontFamily: 'Inter_600SemiBold' }}>{ex.name}</Text>
-                <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-                  <View style={[styles.tag, { backgroundColor: `${colors.primary}15` }]}>
-                    <Text style={{ color: colors.primary, fontSize: 11, fontFamily: 'Inter_500Medium' }}>{ex.muscle}</Text>
-                  </View>
-                  <View style={[styles.tag, { backgroundColor: `${colors.secondary}15` }]}>
-                    <Text style={{ color: colors.secondary, fontSize: 11, fontFamily: 'Inter_500Medium' }}>{ex.equipment}</Text>
-                  </View>
-                  <View style={[styles.tag, { backgroundColor: `${DIFFICULTY_COLORS[ex.difficulty]}20` }]}>
-                    <Text style={{ color: DIFFICULTY_COLORS[ex.difficulty], fontSize: 11, fontFamily: 'Inter_500Medium' }}>{ex.difficulty}</Text>
-                  </View>
-                </View>
-              </View>
-              <View style={{ alignItems: 'flex-end', gap: 3 }}>
-                <Text style={{ color: colors.mutedForeground, fontSize: 12, fontFamily: 'Inter_400Regular' }}>{ex.sets} sets</Text>
-                <Text style={{ color: colors.primary, fontSize: 12, fontFamily: 'Inter_600SemiBold' }}>{ex.reps}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
-            </Pressable>
-          )}
-          ListEmptyComponent={
-            <View style={{ alignItems: 'center', paddingVertical: 40, gap: 8 }}>
-              <Ionicons name="search-outline" size={36} color={colors.mutedForeground} />
-              <Text style={{ color: colors.mutedForeground, fontSize: 14, fontFamily: 'Inter_400Regular' }}>No exercises found</Text>
-            </View>
-          }
-        />
-
-        {/* Exercise detail modal */}
-        {selected && (
-          <View style={[StyleSheet.absoluteFill, styles.detailOverlay, { backgroundColor: `${colors.background}F5` }]}>
-            <View style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                <View style={{ flex: 1, gap: 6 }}>
-                  <Text style={{ color: colors.foreground, fontSize: 22, fontFamily: 'Inter_700Bold', letterSpacing: -0.3 }}>{selected.name}</Text>
-                  <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-                    <View style={[styles.tag, { backgroundColor: `${colors.primary}20` }]}>
-                      <Text style={{ color: colors.primary, fontSize: 12, fontFamily: 'Inter_600SemiBold' }}>{selected.muscle}</Text>
-                    </View>
-                    <View style={[styles.tag, { backgroundColor: `${DIFFICULTY_COLORS[selected.difficulty]}20` }]}>
-                      <Text style={{ color: DIFFICULTY_COLORS[selected.difficulty], fontSize: 12, fontFamily: 'Inter_600SemiBold' }}>{selected.difficulty}</Text>
-                    </View>
-                  </View>
-                </View>
-                <Pressable onPress={() => setSelected(null)} style={{ padding: 4 }}>
-                  <Ionicons name="close-circle" size={28} color={colors.mutedForeground} />
-                </Pressable>
-              </View>
-
-              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-                {[
-                  { label: 'Sets', val: selected.sets, icon: 'repeat-outline' },
-                  { label: 'Reps', val: selected.reps, icon: 'barbell-outline' },
-                  { label: 'Rest', val: selected.rest, icon: 'timer-outline' },
-                  { label: 'Equipment', val: selected.equipment, icon: 'fitness-outline' },
-                ].map(s => (
-                  <View key={s.label} style={{ flex: 1, alignItems: 'center', backgroundColor: `${colors.primary}10`, borderRadius: 10, paddingVertical: 10, gap: 4 }}>
-                    <Ionicons name={s.icon as any} size={16} color={colors.primary} />
-                    <Text style={{ color: colors.foreground, fontSize: 12, fontFamily: 'Inter_700Bold', textAlign: 'center' }}>{s.val}</Text>
-                    <Text style={{ color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_400Regular' }}>{s.label}</Text>
-                  </View>
-                ))}
-              </View>
-
-              <View style={[styles.tipBox, { backgroundColor: `${colors.accent}15`, borderColor: `${colors.accent}33` }]}>
-                <Ionicons name="bulb-outline" size={16} color={colors.accent} />
-                <Text style={{ color: colors.mutedForeground, fontSize: 13, fontFamily: 'Inter_400Regular', flex: 1, lineHeight: 19 }}>
-                  {selected.tip}
-                </Text>
-              </View>
-
-              <Pressable
-                onPress={() => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); setSelected(null); }}
-                style={[styles.gotItBtn, { backgroundColor: colors.primary }]}
-              >
-                <Text style={{ color: '#000', fontFamily: 'Inter_700Bold', fontSize: 15 }}>Got it</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
-      </View>
-    </Modal>
-  );
+function buildSchedule(weeklySchedule: Record<string, Workout> | null): Record<string, Workout> {
+  return PLAN_DAYS.reduce<Record<string, Workout>>((acc, day) => {
+    acc[day] = normalizeWorkout(day, weeklySchedule?.[day]);
+    return acc;
+  }, {});
 }
 
-// ─── Live Workout Session ────────────────────────────────────────────────────
-
-// ─── Workout Summary / Celebration ────────────────────────────────────────────
-
-function WorkoutSummary({ workout, elapsed, completedCount, totalSets, onFinish }: {
-  workout: Workout; elapsed: number; completedCount: number; totalSets: number; onFinish: () => void;
-}) {
-  const colors = useColors();
-  const cal = Math.round(workout.calories * (Math.ceil(elapsed / 60) / workout.duration));
-  const scale = useSharedValue(0);
-  useEffect(() => { scale.value = withSpring(1, { damping: 8, stiffness: 80 }); }, []);
-  const anim = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-
-  return (
-    <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', backgroundColor: `${colors.background}E0` }]}>
-      <Animated.View entering={FadeInDown.duration(500).springify()} style={{ alignItems: 'center', gap: 24, paddingHorizontal: 32 }}>
-        <Animated.View style={[{ width: 100, height: 100, borderRadius: 50, backgroundColor: `${colors.primary}20`, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.primary }, anim]}>
-          <Ionicons name="trophy" size={48} color={colors.primary} />
-        </Animated.View>
-        <Text style={{ color: colors.foreground, fontSize: 28, fontFamily: 'Inter_700Bold', textAlign: 'center' }}>Workout Complete!</Text>
-        <View style={{ flexDirection: 'row', gap: 20, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {[
-            { icon: 'time-outline', label: 'Duration', value: `${Math.floor(elapsed / 60).toString().padStart(2, '0')}:${(elapsed % 60).toString().padStart(2, '0')} min` },
-            { icon: 'flame-outline', label: 'Calories', value: `${cal} kcal` },
-            { icon: 'repeat-outline', label: 'Sets', value: `${completedCount}` },
-            { icon: 'barbell-outline', label: 'Exercises', value: `${workout.exercises.length}` },
-          ].map(s => (
-            <View key={s.label} style={{ alignItems: 'center', backgroundColor: colors.card, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 16, minWidth: 80, gap: 6 }}>
-              <Ionicons name={s.icon as any} size={20} color={colors.primary} />
-              <Text style={{ color: colors.foreground, fontSize: 18, fontFamily: 'Inter_700Bold' }}>{s.value}</Text>
-              <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_400Regular' }}>{s.label}</Text>
-            </View>
-          ))}
-        </View>
-        <Pressable onPress={onFinish}
-          style={{ backgroundColor: colors.primary, height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 48, width: '100%' }}
-        >
-          <Text style={{ color: '#000', fontSize: 16, fontFamily: 'Inter_700Bold' }}>Done</Text>
-        </Pressable>
-      </Animated.View>
-    </View>
-  );
+function exerciseFromLibrary(item: LibraryExercise): Exercise {
+  return {
+    name: item.name,
+    sets: item.category === 'Cardio' || item.category === 'Mobility' ? 1 : 3,
+    reps: item.category === 'Cardio' ? '20 min' : item.category === 'Mobility' ? '60s' : '8-12',
+    rest: item.category === 'Cardio' ? 30 : 60,
+    muscleGroup: item.targetMuscle || item.primaryMuscles?.[0] || 'Full Body',
+  };
 }
 
-// ─── Live Workout Session (Premium) ──────────────────────────────────────────
+function recalcWorkout(workout: Workout, exercises: Exercise[]): Workout {
+  const muscleGroups = Array.from(new Set(exercises.map((e) => e.muscleGroup).filter(Boolean)));
+  return {
+    ...workout,
+    exercises,
+    muscleGroups,
+    duration: Math.max(exercises.length ? 12 : 0, exercises.reduce((sum, e) => sum + e.sets * 4, 0)),
+    calories: Math.max(exercises.length ? 80 : 0, exercises.reduce((sum, e) => sum + e.sets * 35, 0)),
+  };
+}
 
 function WorkoutSession({ workout, onFinish }: { workout: Workout; onFinish: () => void }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { completeWorkout } = useUser();
+  const progressVal = useSharedValue(0);
 
   const [exerciseIdx, setExerciseIdx] = useState(0);
   const [setIdx, setSetIdx] = useState(0);
@@ -304,183 +106,144 @@ function WorkoutSession({ workout, onFinish }: { workout: Workout; onFinish: () 
   const [elapsed, setElapsed] = useState(0);
   const [restRemaining, setRestRemaining] = useState(0);
   const [isResting, setIsResting] = useState(false);
-  const [showSummary, setShowSummary] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const restRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const restDuration = useRef(60);
+  const exercise = workout.exercises[exerciseIdx];
+  const totalSets = workout.exercises.reduce((s, e) => s + e.sets, 0);
+  const progressStyle = useAnimatedStyle(() => ({ width: `${progressVal.value * 100}%` as `${number}%` }));
 
   useEffect(() => {
     timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (restRef.current) clearInterval(restRef.current);
+    };
   }, []);
 
-  const exercise = workout.exercises[exerciseIdx];
-  if (!exercise && !showSummary) { setShowSummary(true); return null; }
-
-  const totalSets = workout.exercises.reduce((s, e) => s + e.sets, 0);
-  const progressVal = useSharedValue(0);
-  useEffect(() => { progressVal.value = withTiming(totalSets > 0 ? completedCount / totalSets : 0, { duration: 400 }); }, [completedCount]);
-  const progressStyle = useAnimatedStyle(() => ({ width: `${progressVal.value * 100}%` as `${number}%` }));
-
-  // Circular rest timer
-  const restProgress = useSharedValue(1);
   useEffect(() => {
-    if (isResting && restDuration.current > 0) {
-      restProgress.value = withTiming(restRemaining / restDuration.current, { duration: 200 });
-    }
-  }, [restRemaining, isResting]);
+    progressVal.value = withTiming(totalSets > 0 ? completedCount / totalSets : 0, { duration: 350 });
+  }, [completedCount, progressVal, totalSets]);
 
-  function fmt(s: number) { return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`; }
+  useEffect(() => {
+    if (!exercise) onFinish();
+  }, [exercise, onFinish]);
 
-  function startRest(secs: number) {
-    restDuration.current = secs;
-    setRestRemaining(secs); setIsResting(true);
-    restProgress.value = 1;
+  const finishWorkout = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (restRef.current) clearInterval(restRef.current);
+    const minutes = Math.max(1, Math.ceil(elapsed / 60));
+    const cal = workout.duration > 0 ? Math.round(workout.calories * (minutes / workout.duration)) : workout.calories;
+    completeWorkout(cal);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    onFinish();
+  }, [completeWorkout, elapsed, onFinish, workout.calories, workout.duration]);
+
+  const startRest = useCallback((secs: number) => {
+    setRestRemaining(secs);
+    setIsResting(true);
+    if (restRef.current) clearInterval(restRef.current);
     restRef.current = setInterval(() => {
       setRestRemaining(r => {
-        if (r <= 1) { if (restRef.current) clearInterval(restRef.current); setIsResting(false); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); return 0; }
+        if (r <= 1) {
+          if (restRef.current) clearInterval(restRef.current);
+          setIsResting(false);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          return 0;
+        }
         return r - 1;
       });
     }, 1000);
-  }
+  }, []);
 
-  function handleCompleteSet() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    if (restRef.current) clearInterval(restRef.current);
+  const handleCompleteSet = useCallback(() => {
+    if (!exercise) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const newCount = completedCount + 1;
     setCompletedCount(newCount);
-    if (setIdx + 1 < exercise.sets) { setSetIdx(s => s + 1); startRest(exercise.rest); }
-    else if (exerciseIdx + 1 < workout.exercises.length) { setExerciseIdx(i => i + 1); setSetIdx(0); startRest(60); }
-    else finishWorkout();
-  }
+    if (setIdx + 1 < exercise.sets) {
+      setSetIdx(s => s + 1);
+      startRest(exercise.rest);
+    } else if (exerciseIdx + 1 < workout.exercises.length) {
+      setExerciseIdx(i => i + 1);
+      setSetIdx(0);
+      startRest(60);
+    } else {
+      finishWorkout();
+    }
+  }, [completedCount, exercise, exerciseIdx, finishWorkout, setIdx, startRest, workout.exercises.length]);
 
-  function finishWorkout() {
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (restRef.current) clearInterval(restRef.current);
-    setIsResting(false);
-    const cal = Math.round(workout.calories * (Math.ceil(elapsed / 60) / workout.duration));
-    completeWorkout(cal);
-    setShowSummary(true);
-  }
-
-  if (showSummary) {
-    return <WorkoutSummary workout={workout} elapsed={elapsed} completedCount={completedCount} totalSets={totalSets} onFinish={onFinish} />;
-  }
+  if (!exercise) return null;
 
   const topPad = Platform.OS === 'web' ? 60 : insets.top;
+  const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 
   return (
     <View style={[styles.session, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.sessionHeader, { paddingTop: topPad + 12, borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => Alert.alert('Exit', 'Progress will not be saved.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Exit', style: 'destructive', onPress: onFinish }])}
+      <View style={[styles.sessionHeader, { paddingTop: topPad + 12 }]}>
+        <Pressable
+          onPress={() => Alert.alert('Exit', 'Progress will not be saved.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Exit', style: 'destructive', onPress: onFinish }])}
           style={[styles.exitBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
         >
           <Ionicons name="close" size={20} color={colors.foreground} />
         </Pressable>
-        <View style={{ alignItems: 'center' }}>
-          <Text style={{ color: colors.mutedForeground, fontSize: 12, fontFamily: 'Inter_500Medium' }}>{workout.name}</Text>
-          <Text style={{ color: colors.foreground, fontSize: 30, fontFamily: 'Inter_700Bold', letterSpacing: 0.5, fontVariant: ['tabular-nums'] }}>{fmt(elapsed)}</Text>
+        <View style={styles.sessionTitleWrap}>
+          <Text style={{ color: colors.foreground, fontSize: 14, fontFamily: 'Inter_600SemiBold' }} numberOfLines={1}>{workout.name}</Text>
+          <Text style={{ color: colors.primary, fontSize: 26, fontFamily: 'Inter_700Bold', letterSpacing: 1 }}>{fmt(elapsed)}</Text>
         </View>
-        <Pressable onPress={() => Alert.alert('Finish Workout', 'Complete this session?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Finish', onPress: finishWorkout }])}
-          style={[styles.doneBtn, { backgroundColor: `${colors.primary}20`, borderColor: `${colors.primary}44` }]}
-        >
-          <Text style={{ color: colors.primary, fontFamily: 'Inter_700Bold', fontSize: 13 }}>Done</Text>
+        <Pressable onPress={finishWorkout} style={[styles.doneBtn, { backgroundColor: `${colors.primary}20`, borderColor: `${colors.primary}44` }]}>
+          <Text style={{ color: colors.primary, fontFamily: 'Inter_600SemiBold', fontSize: 12 }}>Done</Text>
         </Pressable>
       </View>
 
-      {/* Progress */}
-      <View style={{ paddingHorizontal: 20, marginTop: 12 }}>
+      <View style={styles.progressWrap}>
         <View style={[styles.progressBg, { backgroundColor: colors.border }]}>
           <Animated.View style={[styles.progressFill, progressStyle, { backgroundColor: colors.primary }]} />
         </View>
         <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 4 }}>
-          {completedCount}/{totalSets} sets · Exercise {exerciseIdx + 1}/{workout.exercises.length}
+          {completedCount}/{totalSets} sets
         </Text>
       </View>
 
-      {/* Exercise Display */}
-      <View style={{ flex: 1, paddingHorizontal: 20, justifyContent: 'center', gap: 32 }}>
-        <Animated.View key={`${exerciseIdx}-${setIdx}`} entering={FadeInDown.duration(400).springify()} style={{ alignItems: 'center', gap: 8 }}>
-          <View style={[styles.muscleBadge, { backgroundColor: `${colors.secondary}20`, borderColor: `${colors.secondary}44` }]}>
+      <View style={styles.sessionBody}>
+        <View style={styles.centerGap}>
+          <View style={[styles.exerciseBadge, { backgroundColor: `${colors.secondary}20`, borderColor: `${colors.secondary}44` }]}>
             <Text style={{ color: colors.secondary, fontFamily: 'Inter_600SemiBold', fontSize: 11, letterSpacing: 1 }}>
-              {exercise.muscleGroup.toUpperCase()}
+              EXERCISE {exerciseIdx + 1}/{workout.exercises.length}
             </Text>
           </View>
-          <Text style={{ color: colors.foreground, fontSize: 32, fontFamily: 'Inter_700Bold', textAlign: 'center', letterSpacing: -0.5 }}>
-            {exercise.name}
-          </Text>
-
-        </Animated.View>
-
-        {/* Set / Reps Card */}
-        <Animated.View key={`sets-${exerciseIdx}-${setIdx}`} entering={FadeInDown.duration(400).delay(100).springify()} style={{ alignItems: 'center' }}>
-          <View style={[styles.setCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={{ alignItems: 'center', gap: 4 }}>
-              <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_600SemiBold', letterSpacing: 1.5 }}>SET</Text>
-              <Text style={{ color: colors.foreground, fontSize: 52, fontFamily: 'Inter_700Bold', letterSpacing: -2 }}>
-                {setIdx + 1}<Text style={{ color: colors.mutedForeground, fontSize: 28 }}>/{exercise.sets}</Text>
-              </Text>
-            </View>
-            <View style={{ width: 1, height: 60, backgroundColor: colors.border }} />
-            <View style={{ alignItems: 'center', gap: 4 }}>
-              <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_600SemiBold', letterSpacing: 1.5 }}>REPS</Text>
-              <Text style={{ color: colors.primary, fontSize: 36, fontFamily: 'Inter_700Bold', letterSpacing: -1 }}>{exercise.reps}</Text>
-            </View>
+          <Text style={{ color: colors.foreground, fontSize: 30, fontFamily: 'Inter_700Bold', textAlign: 'center' }}>{exercise.name}</Text>
+          <Text style={{ color: colors.mutedForeground, fontSize: 14, fontFamily: 'Inter_400Regular' }}>{exercise.muscleGroup}</Text>
+        </View>
+        <View style={[styles.setCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.centerGapSmall}>
+            <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_600SemiBold', letterSpacing: 1 }}>SET</Text>
+            <Text style={{ color: colors.foreground, fontSize: 48, fontFamily: 'Inter_700Bold' }}>
+              {setIdx + 1}<Text style={{ color: colors.mutedForeground, fontSize: 24 }}>/{exercise.sets}</Text>
+            </Text>
           </View>
-        </Animated.View>
-
-        {/* Exercise dots */}
-        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6 }}>
-          {workout.exercises.map((_, i) => (
-            <View key={i} style={{
-              width: i === exerciseIdx ? 22 : 7,
-              height: 7,
-              borderRadius: 4,
-              backgroundColor: i < exerciseIdx ? colors.primary : i === exerciseIdx ? colors.secondary : colors.border,
-            }} />
-          ))}
+          <View style={{ width: 1, height: 60, backgroundColor: colors.border }} />
+          <View style={styles.centerGapSmall}>
+            <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_600SemiBold', letterSpacing: 1 }}>REPS</Text>
+            <Text style={{ color: colors.primary, fontSize: 30, fontFamily: 'Inter_700Bold' }}>{exercise.reps}</Text>
+          </View>
         </View>
       </View>
 
-      {/* Rest Overlay — Circular Timer */}
-      {isResting && (
-        <View style={[StyleSheet.absoluteFill, styles.restOverlay, { backgroundColor: `${colors.background}F0` }]}>
-          <Animated.View entering={FadeInDown.duration(300).springify()} style={[styles.restCard, { backgroundColor: colors.card, borderColor: `${colors.secondary}55` }]}>
-            <Svg width={200} height={200} style={{ position: 'absolute', top: -20 }}>
-              <Circle cx={100} cy={100} r={90} stroke={colors.border} strokeWidth={6} fill="none" />
-              <Circle cx={100} cy={100} r={90} stroke={colors.secondary} strokeWidth={6} fill="none"
-                strokeDasharray={`${2 * Math.PI * 90}`}
-                strokeDashoffset={`${2 * Math.PI * 90 * (1 - restRemaining / Math.max(restDuration.current, 1))}`}
-                strokeLinecap="round"
-                transform="rotate(-90 100 100)"
-              />
-            </Svg>
-            <Ionicons name="timer-outline" size={32} color={colors.secondary} />
-            <Text style={{ color: colors.foreground, fontSize: 16, fontFamily: 'Inter_600SemiBold' }}>Rest</Text>
-            <Text style={{ color: colors.secondary, fontSize: 64, fontFamily: 'Inter_700Bold', letterSpacing: -2, fontVariant: ['tabular-nums'] }}>{restRemaining}</Text>
-            <Pressable onPress={() => { if (restRef.current) clearInterval(restRef.current); setIsResting(false); }}
-              style={[styles.skipBtn, { backgroundColor: `${colors.secondary}15`, borderColor: `${colors.secondary}33` }]}
-            >
-              <Text style={{ color: colors.secondary, fontFamily: 'Inter_600SemiBold', fontSize: 14 }}>Skip →</Text>
-            </Pressable>
-          </Animated.View>
+      {isResting ? (
+        <View style={[StyleSheet.absoluteFill, styles.restOverlay, { backgroundColor: `${colors.background}EE` }]}>
+          <Ionicons name="timer-outline" size={44} color={colors.secondary} />
+          <Text style={{ color: colors.foreground, fontSize: 20, fontFamily: 'Inter_600SemiBold' }}>Rest</Text>
+          <Text style={{ color: colors.secondary, fontSize: 64, fontFamily: 'Inter_700Bold' }}>{restRemaining}</Text>
+          <Pressable onPress={() => { if (restRef.current) clearInterval(restRef.current); setIsResting(false); }} style={[styles.skipBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={{ color: colors.foreground, fontFamily: 'Inter_600SemiBold' }}>Skip Rest</Text>
+          </Pressable>
         </View>
-      )}
-
-      {/* Complete Set Button */}
-      {!isResting && (
+      ) : (
         <View style={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 24) + 16 }}>
-          <Pressable onPress={handleCompleteSet}
-            style={({ pressed }) => [styles.completeBtn, {
-              backgroundColor: colors.primary,
-              opacity: pressed ? 0.85 : 1,
-              transform: [{ scale: pressed ? 0.97 : 1 }],
-            }]}
-          >
-            <Ionicons name="checkmark-circle" size={22} color="#000" />
-            <Text style={{ color: '#000', fontFamily: 'Inter_700Bold', fontSize: 17 }}>Complete Set</Text>
+          <Pressable onPress={handleCompleteSet} style={({ pressed }) => [styles.completeBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}>
+            <Ionicons name="checkmark" size={22} color={colors.primaryForeground} />
+            <Text style={{ color: colors.primaryForeground, fontFamily: 'Inter_700Bold', fontSize: 17 }}>Complete Set</Text>
           </Pressable>
         </View>
       )}
@@ -488,118 +251,409 @@ function WorkoutSession({ workout, onFinish }: { workout: Workout; onFinish: () 
   );
 }
 
-// ─── Workout Browse ──────────────────────────────────────────────────────────
+const ExerciseRow = memo(function ExerciseRow({
+  exercise,
+  index,
+  total,
+  onMove,
+  onDelete,
+  onSwap,
+}: {
+  exercise: Exercise;
+  index: number;
+  total: number;
+  onMove: (from: number, direction: -1 | 1) => void;
+  onDelete: (index: number) => void;
+  onSwap: (index: number) => void;
+}) {
+  const colors = useColors();
+  return (
+    <View style={[styles.exerciseRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={styles.exerciseIndex}>
+        <Text style={{ color: colors.primary, fontFamily: 'Inter_700Bold', fontSize: 12 }}>{index + 1}</Text>
+      </View>
+      <View style={styles.exerciseMain}>
+        <Text style={{ color: colors.foreground, fontFamily: 'Inter_700Bold', fontSize: 15 }} numberOfLines={1}>{exercise.name}</Text>
+        <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_400Regular', fontSize: 12 }} numberOfLines={1}>
+          {exercise.sets} sets | {exercise.reps} | {exercise.muscleGroup}
+        </Text>
+      </View>
+      <View style={styles.rowActions}>
+        <Pressable disabled={index === 0} onPress={() => onMove(index, -1)} style={[styles.iconBtn, { opacity: index === 0 ? 0.35 : 1 }]}>
+          <Ionicons name="chevron-up" size={16} color={colors.foreground} />
+        </Pressable>
+        <Pressable disabled={index === total - 1} onPress={() => onMove(index, 1)} style={[styles.iconBtn, { opacity: index === total - 1 ? 0.35 : 1 }]}>
+          <Ionicons name="chevron-down" size={16} color={colors.foreground} />
+        </Pressable>
+        <Pressable onPress={() => onSwap(index)} style={styles.iconBtn}>
+          <Ionicons name="swap-horizontal" size={16} color={colors.secondary} />
+        </Pressable>
+        <Pressable onPress={() => onDelete(index)} style={styles.iconBtn}>
+          <Ionicons name="trash-outline" size={16} color="#FF5C7A" />
+        </Pressable>
+      </View>
+    </View>
+  );
+});
 
 export default function WorkoutScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
-  const { weeklySchedule } = useUser();
-  const { startWorkout, endWorkout } = useWorkoutStore();
+  const { weeklySchedule, setWeeklySchedule } = useUser();
+  const bottomSheetRef = useRef<BottomSheet>(null);
+  const searchInputRef = useRef<TextInput>(null);
+
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
-  const [libraryVisible, setLibraryVisible] = useState(false);
+  const [viewMode, setViewMode] = useState<'today' | 'week'>('today');
+  const [schedule, setSchedule] = useState<Record<string, Workout>>(() => buildSchedule(weeklySchedule));
+  const [addTarget, setAddTarget] = useState<AddTarget | null>(null);
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState('All');
+  const [results, setResults] = useState<LibraryExercise[]>(fallbackLibrary);
+  const [customName, setCustomName] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+
   const topPad = Platform.OS === 'web' ? 60 : insets.top;
-  const todayIdx = new Date().getDay();
-  const todayName = DAY_NAMES[todayIdx];
+  const todayName = DAY_NAMES[new Date().getDay()];
+  const todayWorkout = schedule[todayName] ?? normalizeWorkout(todayName);
+  const snapPoints = useMemo(() => ['58%', '88%'], []);
 
-  const handleStart = useCallback(async (w: Workout) => {
+  useEffect(() => {
+    setSchedule(buildSchedule(weeklySchedule));
+  }, [weeklySchedule]);
+
+  useEffect(() => {
+    let alive = true;
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const params = new URLSearchParams();
+        if (query.trim()) params.set('q', query.trim());
+        if (category !== 'All') params.set('category', category);
+        params.set('limit', '60');
+        const headers = await getAuthHeaders();
+        const res = await fetch(`${getApiBaseUrl()}api/exercises?${params.toString()}`, { headers });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json() as { exercises?: LibraryExercise[] };
+        if (alive) setResults(data.exercises?.length ? data.exercises : fallbackLibrary);
+      } catch {
+        if (alive) setResults(fallbackLibrary);
+      } finally {
+        if (alive) setIsSearching(false);
+      }
+    }, 220);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [category, query]);
+
+  const persistSchedule = useCallback(async (next: Record<string, Workout>) => {
+    setSchedule(next);
+    await setWeeklySchedule(next);
+  }, [setWeeklySchedule]);
+
+  const updateDay = useCallback(async (day: string, updater: (workout: Workout) => Workout) => {
+    const next = { ...schedule, [day]: updater(schedule[day] ?? normalizeWorkout(day)) };
+    await persistSchedule(next);
+  }, [persistSchedule, schedule]);
+
+  const openAddSheet = useCallback((target: AddTarget) => {
+    setAddTarget(target);
+    setQuery('');
+    setCustomName('');
+    bottomSheetRef.current?.snapToIndex(0);
+    setTimeout(() => searchInputRef.current?.focus(), 250);
+  }, []);
+
+  const closeSheet = useCallback(() => {
+    bottomSheetRef.current?.close();
+    setAddTarget(null);
+  }, []);
+
+  const addLibraryExercise = useCallback(async (item: LibraryExercise) => {
+    if (!addTarget) return;
+    const newExercise = exerciseFromLibrary(item);
+    await updateDay(addTarget.day, (workout) => {
+      const nextExercises = [...workout.exercises];
+      if (typeof addTarget.replaceIndex === 'number') nextExercises[addTarget.replaceIndex] = newExercise;
+      else nextExercises.push(newExercise);
+      return recalcWorkout(workout, nextExercises);
+    });
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    closeSheet();
+  }, [addTarget, closeSheet, updateDay]);
+
+  const addCustomExercise = useCallback(async () => {
+    const name = customName.trim();
+    if (!name || !addTarget) return;
+    await addLibraryExercise({
+      id: `custom-${Date.now()}`,
+      name,
+      category: 'Custom',
+      targetMuscle: 'Full Body',
+      equipment: 'User Defined',
+      primaryMuscles: ['Full Body'],
+      estimatedCaloriesPerMinute: 5,
+    });
+  }, [addLibraryExercise, addTarget, customName]);
+
+  const moveExercise = useCallback((day: string, index: number, direction: -1 | 1) => {
+    updateDay(day, (workout) => {
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= workout.exercises.length) return workout;
+      const nextExercises = [...workout.exercises];
+      [nextExercises[index], nextExercises[nextIndex]] = [nextExercises[nextIndex], nextExercises[index]];
+      return recalcWorkout(workout, nextExercises);
+    });
+  }, [updateDay]);
+
+  const deleteExercise = useCallback((day: string, index: number) => {
+    updateDay(day, (workout) => recalcWorkout(workout, workout.exercises.filter((_, i) => i !== index)));
+  }, [updateDay]);
+
+  const startWorkout = useCallback((workout: Workout) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    await startWorkout(w);
-    setActiveWorkout(w);
-  }, [startWorkout]);
+    setActiveWorkout(workout);
+  }, []);
 
-  function handleFinishWorkout() {
-    endWorkout();
-    setActiveWorkout(null);
-  }
+  const renderWorkoutEditor = useCallback((day: string, workout: Workout, compact = false) => (
+    <View style={[styles.workoutPanel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={styles.panelHeader}>
+        <View style={styles.panelTitleWrap}>
+          <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_700Bold', letterSpacing: 1 }}>{day.toUpperCase()}</Text>
+          <Text style={{ color: colors.foreground, fontSize: compact ? 19 : 23, fontFamily: 'Inter_700Bold' }} numberOfLines={1}>{workout.name}</Text>
+          <Text style={{ color: colors.mutedForeground, fontSize: 12, fontFamily: 'Inter_400Regular' }} numberOfLines={1}>
+            {workout.type} | {workout.duration} min | {workout.calories} kcal
+          </Text>
+        </View>
+        <Pressable onPress={() => openAddSheet({ day })} style={[styles.addBtn, { backgroundColor: colors.primary }]}>
+          <Ionicons name="add" size={18} color={colors.primaryForeground} />
+          <Text style={{ color: colors.primaryForeground, fontFamily: 'Inter_700Bold', fontSize: 13 }}>Add</Text>
+        </Pressable>
+      </View>
 
-  if (activeWorkout) return <TodayWorkoutView workout={activeWorkout} onClose={handleFinishWorkout} />;
+      {workout.exercises.length > 0 ? (
+        <View style={styles.exerciseList}>
+          {workout.exercises.map((exercise, index) => (
+            <ExerciseRow
+              key={`${exercise.name}-${index}`}
+              exercise={exercise}
+              index={index}
+              total={workout.exercises.length}
+              onMove={(from, dir) => moveExercise(day, from, dir)}
+              onDelete={(idx) => deleteExercise(day, idx)}
+              onSwap={(idx) => openAddSheet({ day, replaceIndex: idx })}
+            />
+          ))}
+        </View>
+      ) : (
+        <View style={[styles.emptyPlan, { borderColor: colors.border }]}>
+          <Ionicons name="calendar-clear-outline" size={20} color={colors.mutedForeground} />
+          <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_500Medium', fontSize: 13 }}>No exercises yet. Add one or keep this as recovery.</Text>
+        </View>
+      )}
 
-  const displayList: Workout[] = weeklySchedule
-    ? Object.entries(weeklySchedule)
-        .filter(([, w]) => w && w.name && w.exercises)
-        .map(([day, w], i) => ({ ...w, id: w.id ?? `ai-${i}`, _day: day } as Workout & { _day: string }))
-    : WORKOUTS;
+      <Pressable
+        onPress={() => startWorkout(workout)}
+        disabled={!workout.exercises.length}
+        style={({ pressed }) => [
+          styles.startBtn,
+          {
+            backgroundColor: workout.exercises.length ? `${colors.secondary}22` : colors.muted,
+            borderColor: workout.exercises.length ? `${colors.secondary}55` : colors.border,
+            opacity: pressed ? 0.82 : 1,
+          },
+        ]}
+      >
+        <Ionicons name="play" size={16} color={workout.exercises.length ? colors.secondary : colors.mutedForeground} />
+        <Text style={{ color: workout.exercises.length ? colors.secondary : colors.mutedForeground, fontFamily: 'Inter_700Bold', fontSize: 13 }}>Start Workout</Text>
+      </Pressable>
+    </View>
+  ), [colors, deleteExercise, moveExercise, openAddSheet, startWorkout]);
+
+  if (activeWorkout) return <WorkoutSession workout={activeWorkout} onFinish={() => setActiveWorkout(null)} />;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <FlatList
-        data={displayList}
-        keyExtractor={w => w.id}
-        contentContainerStyle={{ paddingTop: topPad + 70, paddingHorizontal: 20, paddingBottom: 100 + (Platform.OS === 'web' ? 0 : insets.bottom), gap: 12 }}
-        showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => {
-          const isToday = weeklySchedule
-            ? (item as any)._day === todayName
-            : displayList.indexOf(item) === todayIdx % WORKOUTS.length;
-          return <WorkoutCard workout={item} onPress={handleStart} isToday={isToday} />;
-        }}
-        ListHeaderComponent={
-          <View style={{ gap: 10, marginBottom: 6 }}>
-            <Text style={{ color: colors.foreground, fontSize: 28, fontFamily: 'Inter_700Bold', letterSpacing: -0.5 }}>
-              {weeklySchedule ? 'Your AI Plan' : 'Workouts'}
-            </Text>
-            <Text style={{ color: colors.mutedForeground, fontSize: 14, fontFamily: 'Inter_400Regular' }}>
-              {weeklySchedule ? 'Generated by VYTAL ai — tap to begin' : 'Ask VYTAL ai to build a personalised weekly plan'}
-            </Text>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              {!weeklySchedule ? (
-                <Pressable onPress={() => router.push('/(tabs)/coach')}
-                  style={[styles.aiBtn, { backgroundColor: `${colors.primary}15`, borderColor: `${colors.primary}33` }]}
-                >
-                  <Ionicons name="flash" size={15} color={colors.primary} />
-                  <Text style={{ color: colors.primary, fontFamily: 'Inter_600SemiBold', fontSize: 13 }}>Build my AI plan</Text>
-                </Pressable>
-              ) : (
-                <Pressable onPress={() => router.push('/(tabs)/coach')}
-                  style={[styles.aiBtn, { backgroundColor: `${colors.secondary}15`, borderColor: `${colors.secondary}33` }]}
-                >
-                  <Ionicons name="refresh-outline" size={15} color={colors.secondary} />
-                  <Text style={{ color: colors.secondary, fontFamily: 'Inter_600SemiBold', fontSize: 13 }}>Regenerate plan</Text>
-                </Pressable>
-              )}
-              <Pressable onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setLibraryVisible(true); }}
-                style={[styles.aiBtn, { backgroundColor: `${colors.accent}15`, borderColor: `${colors.accent}33` }]}
-              >
-                <Ionicons name="library-outline" size={15} color={colors.accent} />
-                <Text style={{ color: colors.accent, fontFamily: 'Inter_600SemiBold', fontSize: 13 }}>Exercise Library</Text>
-              </Pressable>
+      <View style={[styles.fixedHeader, { paddingTop: topPad + 8, backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+        <Text style={{ color: colors.foreground, fontSize: 28, fontFamily: 'Inter_700Bold' }}>Workout</Text>
+        <View style={[styles.segment, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          {(['today', 'week'] as const).map((mode) => (
+            <Pressable
+              key={mode}
+              onPress={() => setViewMode(mode)}
+              style={[styles.segmentItem, { backgroundColor: viewMode === mode ? colors.primary : 'transparent' }]}
+            >
+              <Text style={{ color: viewMode === mode ? colors.primaryForeground : colors.mutedForeground, fontFamily: 'Inter_700Bold', fontSize: 12 }}>
+                {mode === 'today' ? "Today's Workout" : 'Weekly Plan'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      {viewMode === 'today' ? (
+        <FlatList
+          data={[todayWorkout]}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => renderWorkoutEditor(todayName, item)}
+          contentContainerStyle={{ paddingTop: topPad + 126, paddingHorizontal: 16, paddingBottom: 120 + insets.bottom }}
+          showsVerticalScrollIndicator={false}
+        />
+      ) : (
+        <FlatList
+          data={PLAN_DAYS.map((day) => ({ day, workout: schedule[day] }))}
+          keyExtractor={(item) => item.day}
+          renderItem={({ item }) => renderWorkoutEditor(item.day, item.workout, true)}
+          contentContainerStyle={{ paddingTop: topPad + 126, paddingHorizontal: 16, paddingBottom: 120 + insets.bottom, gap: 12 }}
+          showsVerticalScrollIndicator={false}
+          initialNumToRender={4}
+          maxToRenderPerBatch={3}
+          windowSize={6}
+        />
+      )}
+
+      <BottomSheet
+        ref={bottomSheetRef}
+        index={-1}
+        snapPoints={snapPoints}
+        enablePanDownToClose
+        backgroundStyle={{ backgroundColor: colors.card }}
+        handleIndicatorStyle={{ backgroundColor: colors.mutedForeground }}
+        backdropComponent={(props) => <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.45} />}
+      >
+        <BottomSheetView style={styles.sheetContent}>
+          <View style={styles.sheetHeader}>
+            <View>
+              <Text style={{ color: colors.foreground, fontFamily: 'Inter_700Bold', fontSize: 20 }}>
+                {typeof addTarget?.replaceIndex === 'number' ? 'Swap Exercise' : 'Add Workout'}
+              </Text>
+              <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_400Regular', fontSize: 12 }}>
+                Search the VYTAL exercise database
+              </Text>
             </View>
+            <Pressable onPress={closeSheet} style={[styles.sheetClose, { backgroundColor: colors.muted }]}>
+              <Ionicons name="close" size={18} color={colors.foreground} />
+            </Pressable>
           </View>
-        }
-      />
-      <View style={[styles.headerBar, { paddingTop: topPad, backgroundColor: colors.background }]} />
-      <ExerciseLibrary visible={libraryVisible} onClose={() => setLibraryVisible(false)} />
+
+          <View style={[styles.searchBox, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <Ionicons name="search" size={18} color={colors.mutedForeground} />
+            <TextInput
+              ref={searchInputRef}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search by exercise, muscle, sport..."
+              placeholderTextColor={colors.mutedForeground}
+              style={[styles.searchInput, { color: colors.foreground }]}
+            />
+          </View>
+
+          <FlatList
+            horizontal
+            data={CATEGORY_FILTERS}
+            keyExtractor={(item) => item}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryRow}
+            renderItem={({ item }) => (
+              <Pressable
+                onPress={() => setCategory(item)}
+                style={[
+                  styles.categoryChip,
+                  {
+                    backgroundColor: category === item ? colors.primary : 'rgba(255,255,255,0.05)',
+                    borderColor: category === item ? colors.primary : 'rgba(255,255,255,0.1)',
+                  },
+                ]}
+              >
+                <Text style={{ color: category === item ? colors.primaryForeground : colors.foreground, fontFamily: 'Inter_700Bold', fontSize: 12 }}>{item}</Text>
+              </Pressable>
+            )}
+          />
+
+          <View style={[styles.customBox, { borderColor: colors.border }]}>
+            <TextInput
+              value={customName}
+              onChangeText={setCustomName}
+              placeholder='Custom entry, e.g. "1 hour Walking"'
+              placeholderTextColor={colors.mutedForeground}
+              style={[styles.customInput, { color: colors.foreground }]}
+            />
+            <Pressable onPress={addCustomExercise} disabled={!customName.trim()} style={[styles.customAdd, { backgroundColor: customName.trim() ? colors.secondary : colors.muted }]}>
+              <Ionicons name="add" size={16} color={customName.trim() ? colors.background : colors.mutedForeground} />
+            </Pressable>
+          </View>
+
+          <BottomSheetFlatList
+            data={results}
+            keyExtractor={(item) => String(item.id)}
+            contentContainerStyle={styles.resultList}
+            renderItem={({ item }) => (
+              <Pressable onPress={() => addLibraryExercise(item)} style={[styles.resultRow, { borderColor: colors.border }]}>
+                <View style={[styles.resultIcon, { backgroundColor: `${colors.primary}18` }]}>
+                  <Ionicons name="barbell-outline" size={18} color={colors.primary} />
+                </View>
+                <View style={styles.exerciseMain}>
+                  <Text style={{ color: colors.foreground, fontFamily: 'Inter_700Bold', fontSize: 14 }} numberOfLines={1}>{item.name}</Text>
+                  <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_400Regular', fontSize: 12 }} numberOfLines={1}>
+                    {item.category} | {item.targetMuscle} | {item.equipment}
+                  </Text>
+                </View>
+                <Ionicons name={isSearching ? 'sync' : 'add-circle'} size={20} color={colors.secondary} />
+              </Pressable>
+            )}
+          />
+        </BottomSheetView>
+      </BottomSheet>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  headerBar: { position: 'absolute', top: 0, left: 0, right: 0, height: 80 },
+  fixedHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, gap: 12 },
+  segment: { flexDirection: 'row', borderRadius: 12, borderWidth: 1, padding: 4, minHeight: 46 },
+  segmentItem: { flex: 1, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingVertical: 10 },
+  workoutPanel: { borderWidth: 1, borderRadius: 16, padding: 14, gap: 14 },
+  panelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  panelTitleWrap: { flex: 1, gap: 3 },
+  addBtn: { height: 38, borderRadius: 11, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
+  exerciseList: { gap: 8 },
+  exerciseRow: { minHeight: 64, borderRadius: 12, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  exerciseIndex: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.06)' },
+  exerciseMain: { flex: 1, gap: 3 },
+  rowActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  iconBtn: { width: 28, height: 32, alignItems: 'center', justifyContent: 'center' },
+  emptyPlan: { minHeight: 70, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', padding: 12, gap: 8 },
+  startBtn: { height: 42, borderRadius: 12, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  sheetContent: { flex: 1, paddingHorizontal: 16, gap: 12 },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sheetClose: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  searchBox: { height: 46, borderRadius: 13, borderWidth: 1, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  searchInput: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 14, paddingVertical: 0 },
+  categoryRow: { gap: 8, paddingVertical: 2 },
+  categoryChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1 },
+  customBox: { height: 44, borderRadius: 12, borderWidth: 1, flexDirection: 'row', alignItems: 'center', paddingLeft: 12, overflow: 'hidden' },
+  customInput: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 13, paddingVertical: 0 },
+  customAdd: { width: 44, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
+  resultList: { paddingBottom: 28 },
+  resultRow: { minHeight: 64, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9 },
+  resultIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   session: { flex: 1 },
-  sessionHeader: { paddingHorizontal: 20, paddingBottom: 12, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', borderBottomWidth: 1 },
+  sessionHeader: { paddingHorizontal: 20, paddingBottom: 12, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  sessionTitleWrap: { alignItems: 'center', flex: 1, paddingHorizontal: 10 },
   exitBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  doneBtn: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, borderWidth: 1 },
+  doneBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
+  progressWrap: { paddingHorizontal: 20, marginTop: 8 },
   progressBg: { height: 6, borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: 3 },
-  muscleBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
-  setCard: { borderRadius: 24, borderWidth: 1, paddingVertical: 28, paddingHorizontal: 40, flexDirection: 'row', alignItems: 'center', gap: 32 },
-  restOverlay: { alignItems: 'center', justifyContent: 'center' },
-  restCard: { borderRadius: 24, borderWidth: 1, padding: 32, alignItems: 'center', gap: 8, width: '80%' },
+  sessionBody: { flex: 1, paddingHorizontal: 20, justifyContent: 'center', gap: 34 },
+  centerGap: { alignItems: 'center', gap: 10 },
+  centerGapSmall: { alignItems: 'center', gap: 3 },
+  exerciseBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
+  setCard: { borderRadius: 20, borderWidth: 1, paddingVertical: 24, paddingHorizontal: 34, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 28 },
+  restOverlay: { alignItems: 'center', justifyContent: 'center', gap: 10 },
   skipBtn: { marginTop: 8, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, borderWidth: 1 },
-  completeBtn: { height: 60, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  aiBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
-  // Library
-  libraryContainer: { flex: 1 },
-  libraryHeader: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1 },
-  closeBtn: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  searchBar: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 11 },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
-  exerciseCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 14, borderWidth: 1 },
-  tag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  detailOverlay: { alignItems: 'center', justifyContent: 'center', padding: 24 },
-  detailCard: { borderRadius: 24, borderWidth: 1, padding: 24, width: '100%', gap: 0 },
-  tipBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 12, borderRadius: 12, borderWidth: 1, marginVertical: 12 },
-  gotItBtn: { height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  completeBtn: { height: 58, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
 });

@@ -1,8 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAuth } from '@clerk/clerk-expo';
 import { Workout } from '@/data/mockData';
-import { getApiBaseUrl } from '@/lib/api';
 
 const STORAGE_KEY = '@vytal_user_v2';
 
@@ -46,23 +44,10 @@ export function stepsToCalories(steps: number, weightKg: number): number {
 
 /** Readiness score 0–100 based on sleep + steps + sleep quality */
 export function calcReadiness(sleepHours: number, steps: number, sleepQuality: 'poor' | 'fair' | 'good' | 'excellent' | null): number {
-  const sleepScore = Math.min(sleepHours / 8, 1) * 55;
+  const sleepScore = Math.min(sleepHours / 8, 1) * 55; // 55% weight on duration
   const qualityBonus = sleepQuality === 'excellent' ? 10 : sleepQuality === 'good' ? 5 : sleepQuality === 'fair' ? -2 : sleepQuality === 'poor' ? -8 : 0;
-  const stepsScore = Math.min(steps / 8000, 1) * 35;
+  const stepsScore = Math.min(steps / 8000, 1) * 35;   // 35% weight on steps
   return Math.max(0, Math.min(100, Math.round(sleepScore + qualityBonus + stepsScore)));
-}
-
-export interface WeightEntry {
-  date: string;
-  weight: number;
-}
-
-export interface DailyNutrition {
-  date: string;
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
 }
 
 export interface UserState {
@@ -80,14 +65,8 @@ export interface UserState {
   sleepHours: number;
   sleepQuality: 'poor' | 'fair' | 'good' | 'excellent' | null;
   stepsToday: number;
-  lastActiveDate: string;
-  showMorningProtocol: boolean;
-  morningProtocolCompletedToday: boolean;
+  lastActiveDate: string; // ISO date string YYYY-MM-DD for daily resets
   isLoading: boolean;
-  // New fields
-  waterMl: number;
-  weightHistory: WeightEntry[];
-  weeklyNutrition: DailyNutrition[];
 }
 
 interface UserContextType extends UserState {
@@ -105,11 +84,6 @@ interface UserContextType extends UserState {
   setStepsToday: (steps: number) => Promise<void>;
   resetNutrition: () => Promise<void>;
   resetUser: () => Promise<void>;
-  completeMorningProtocol: (hours: number, quality: 'poor' | 'fair' | 'good' | 'excellent' | null) => Promise<void>;
-  skipMorningProtocol: () => Promise<void>;
-  addWaterMl: (ml: number) => Promise<void>;
-  setWaterMl: (ml: number) => Promise<void>;
-  logWeight: (weight: number) => Promise<void>;
 }
 
 const defaultNutrition = { calories: 0, protein: 0, carbs: 0, fat: 0 };
@@ -134,7 +108,6 @@ function calcLevel(xp: number) {
 }
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  const { getToken, isSignedIn } = useAuth();
   const [state, setState] = useState<UserState>({
     profile: null,
     fitScore: 0,
@@ -151,12 +124,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     sleepQuality: null,
     stepsToday: 0,
     lastActiveDate: '',
-    showMorningProtocol: false,
-    morningProtocolCompletedToday: false,
     isLoading: true,
-    waterMl: 0,
-    weightHistory: [],
-    weeklyNutrition: [],
   });
 
   const initialized = useRef(false);
@@ -170,41 +138,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         if (raw) {
           try {
             const saved = JSON.parse(raw) as Partial<UserState>;
+            // Daily reset: if it's a new day, wipe transient daily fields
             const isNewDay = saved.lastActiveDate !== today;
-
-            // On new day: archive yesterday's nutrition into weeklyNutrition
-            let updatedWeeklyNutrition = saved.weeklyNutrition ?? [];
-            if (isNewDay && saved.nutritionToday && saved.lastActiveDate) {
-              const entry: DailyNutrition = {
-                date: saved.lastActiveDate,
-                ...saved.nutritionToday,
-              };
-              updatedWeeklyNutrition = [entry, ...updatedWeeklyNutrition].slice(0, 7);
-            }
-
             const dailyReset = isNewDay
-              ? {
-                  sleepHours: 0,
-                  sleepQuality: null as 'poor' | 'fair' | 'good' | 'excellent' | null,
-                  stepsToday: 0,
-                  nutritionToday: defaultNutrition,
-                  workoutCaloriesToday: 0,
-                  waterMl: 0,
-                  lastActiveDate: today,
-                  showMorningProtocol: true,
-                  morningProtocolCompletedToday: false,
-                  weeklyNutrition: updatedWeeklyNutrition,
-                }
+              ? { sleepHours: 0, sleepQuality: null as 'poor' | 'fair' | 'good' | 'excellent' | null, stepsToday: 0, nutritionToday: defaultNutrition, workoutCaloriesToday: 0, lastActiveDate: today }
               : {};
-            setState((prev) => ({
-              ...prev,
-              ...saved,
-              waterMl: saved.waterMl ?? 0,
-              weightHistory: saved.weightHistory ?? [],
-              weeklyNutrition: saved.weeklyNutrition ?? [],
-              ...dailyReset,
-              isLoading: false,
-            }));
+            setState((prev) => ({ ...prev, ...saved, ...dailyReset, isLoading: false }));
             if (isNewDay) {
               AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ ...saved, ...dailyReset })).catch(() => {});
             }
@@ -216,74 +155,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         }
       })
       .catch(() => setState((prev) => ({ ...prev, isLoading: false })));
-
-    // Sync: push local data to server + pull server data
-    (async () => {
-      try {
-        const token = await getToken();
-        if (!token) return;
-
-        // Push local profile to server so a new device can pick it up
-        const localState = await AsyncStorage.getItem(STORAGE_KEY);
-        if (localState) {
-          try {
-            const parsed = JSON.parse(localState) as Partial<UserState>;
-            if (parsed.profile) {
-              const body: Record<string, unknown> = { profile: parsed.profile };
-              if (parsed.fitScore !== undefined || parsed.streak !== undefined) {
-                body.state = {
-                  fitScore: parsed.fitScore,
-                  streak: parsed.streak,
-                  totalWorkouts: parsed.totalWorkouts,
-                  xp: parsed.xp,
-                  level: parsed.level,
-                };
-              }
-              await fetch(`${getApiBaseUrl()}api/users/profile`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify(body),
-              });
-            }
-          } catch {}
-        }
-
-        // Pull server profile and merge with local
-        const res = await fetch(`${getApiBaseUrl()}api/users/profile`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) return;
-        const { user } = await res.json();
-        if (!user) return;
-        setState((prev) => {
-          if (!prev.profile) return prev;
-          const serverProfile: UserProfile = {
-            name: user.name ?? prev.profile.name,
-            age: user.age ?? prev.profile.age,
-            weight: user.weight ?? prev.profile.weight,
-            height: user.height ?? prev.profile.height,
-            gender: user.gender ?? prev.profile.gender,
-            goals: user.goals ?? prev.profile.goals,
-            injuries: user.injuries ?? prev.profile.injuries,
-            equipment: user.equipment ?? prev.profile.equipment,
-            stressLevel: user.stress_level ?? prev.profile.stressLevel,
-            activityLevel: user.activity_level ?? prev.profile.activityLevel,
-            onboardingComplete: user.onboarding_complete ? true : prev.profile.onboardingComplete,
-          };
-          const next = {
-            ...prev,
-            profile: serverProfile,
-            fitScore: user.fit_score ?? prev.fitScore,
-            streak: user.streak ?? prev.streak,
-            totalWorkouts: user.total_workouts ?? prev.totalWorkouts,
-            xp: user.xp ?? prev.xp,
-            level: user.level ?? prev.level,
-          };
-          AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch(() => {});
-          return next;
-        });
-      } catch {}
-    })();
   }, []);
 
   const persist = useCallback((updates: Partial<UserState>) => {
@@ -294,33 +165,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const syncToServer = useCallback(async (profile?: UserProfile, gamification?: Partial<UserState>) => {
-    try {
-      const token = await getToken();
-      if (!token) return;
-      const body: Record<string, unknown> = {};
-      if (profile) body.profile = profile;
-      if (gamification) {
-        body.state = {
-          fitScore: gamification.fitScore,
-          streak: gamification.streak,
-          totalWorkouts: gamification.totalWorkouts,
-          xp: gamification.xp,
-          level: gamification.level,
-        };
-      }
-      await fetch(`${getApiBaseUrl()}api/users/profile`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(body),
-      });
-    } catch {}
-  }, [getToken]);
-
   const setProfile = useCallback(async (profile: UserProfile) => {
     persist({ profile });
-    syncToServer(profile, undefined);
-  }, [persist, syncToServer]);
+  }, [persist]);
 
   const completeWorkout = useCallback(async (calories: number) => {
     setState((prev) => {
@@ -340,10 +187,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         workoutCaloriesToday: prev.workoutCaloriesToday + calories,
       };
       AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ ...prev, ...updated })).catch(() => {});
-      syncToServer(undefined, updated);
       return { ...prev, ...updated };
     });
-  }, [syncToServer]);
+  }, []);
 
   const updateNutrition = useCallback(async (item: { calories: number; protein: number; carbs: number; fat: number }) => {
     setState((prev) => {
@@ -385,30 +231,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     persist({ nutritionToday: defaultNutrition, workoutCaloriesToday: 0 });
   }, [persist]);
 
-  const addWaterMl = useCallback(async (ml: number) => {
-    setState((prev) => {
-      const updated = { waterMl: Math.min(prev.waterMl + ml, 5000) };
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ ...prev, ...updated })).catch(() => {});
-      return { ...prev, ...updated };
-    });
-  }, []);
-
-  const setWaterMl = useCallback(async (ml: number) => {
-    persist({ waterMl: Math.max(0, Math.min(ml, 5000)) });
-  }, [persist]);
-
-  const logWeight = useCallback(async (weight: number) => {
-    setState((prev) => {
-      const today = new Date().toISOString().slice(0, 10);
-      const existing = prev.weightHistory.filter(e => e.date !== today);
-      const updated = {
-        weightHistory: [{ date: today, weight }, ...existing].slice(0, 30),
-      };
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ ...prev, ...updated })).catch(() => {});
-      return { ...prev, ...updated };
-    });
-  }, []);
-
   const resetUser = useCallback(async () => {
     await AsyncStorage.removeItem(STORAGE_KEY);
     setState({
@@ -427,28 +249,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       sleepQuality: null,
       stepsToday: 0,
       lastActiveDate: new Date().toISOString().slice(0, 10),
-      showMorningProtocol: false,
-      morningProtocolCompletedToday: false,
       isLoading: false,
-      waterMl: 0,
-      weightHistory: [],
-      weeklyNutrition: [],
     });
   }, []);
-
-  const completeMorningProtocol = useCallback(async (hours: number, quality: 'poor' | 'fair' | 'good' | 'excellent' | null) => {
-    persist({ sleepHours: hours, sleepQuality: quality, showMorningProtocol: false, morningProtocolCompletedToday: true });
-  }, [persist]);
-
-  const skipMorningProtocol = useCallback(async () => {
-    persist({ showMorningProtocol: false });
-  }, [persist]);
 
   const bmr = state.profile ? calcBMR(state.profile) : 0;
   const stepsCal = state.profile ? stepsToCalories(state.stepsToday, state.profile.weight) : 0;
   const tdee = state.profile ? calcTDEE(state.profile, state.workoutCaloriesToday + stepsCal) : 0;
   const readinessScore = calcReadiness(state.sleepHours, state.stepsToday, state.sleepQuality);
 
+  // Calorie goal: TDEE adjusted for goal
   const calorieGoal = state.profile
     ? Math.round(
         tdee *
@@ -478,11 +288,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         setStepsToday,
         resetNutrition,
         resetUser,
-        completeMorningProtocol,
-        skipMorningProtocol,
-        addWaterMl,
-        setWaterMl,
-        logWeight,
       }}
     >
       {children}

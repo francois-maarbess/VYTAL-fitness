@@ -1,7 +1,3 @@
-// Must be first — polyfills DOMException for Hermes before any
-// web API polyfills or react-native-reanimated try to reference it
-import '../polyfills/dom-exception';
-
 import React, { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -18,7 +14,6 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { ClerkProvider } from '@clerk/clerk-expo';
 import { UserProvider } from '@/context/UserContext';
-import { WorkoutStoreProvider } from '@/stores/workoutStore';
 import { tokenCache } from '@/lib/cache';
 
 SplashScreen.preventAutoHideAsync();
@@ -60,9 +55,7 @@ export default function RootLayout() {
           <QueryClientProvider client={queryClient}>
             <GestureHandlerRootView style={{ flex: 1 }}>
               <UserProvider>
-                <WorkoutStoreProvider>
-                  <RootLayoutNav />
-                </WorkoutStoreProvider>
+                <RootLayoutNav />
               </UserProvider>
             </GestureHandlerRootView>
           </QueryClientProvider>
