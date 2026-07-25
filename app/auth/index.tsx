@@ -76,6 +76,7 @@ export default function AuthScreen() {
   const [resendTimer, setResendTimer] = useState(0);
   const [forgotEmailSent, setForgotEmailSent] = useState(false);
   const [secondFactorCode, setSecondFactorCode] = useState("");
+  const [secondFactorStrategy, setSecondFactorStrategy] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   const { signIn, setActive: setSignInActive, isLoaded: signInLoaded } = useSignIn();
@@ -128,7 +129,12 @@ export default function AuthScreen() {
           router.replace("/(tabs)");
         } else if (result.status === "needs_second_factor") {
           const factors = result.supportedSecondFactors ?? [];
-          if (factors.some((f: any) => f.strategy === "totp") || factors.some((f: any) => f.strategy === "phone_code")) {
+          console.log("[Auth] second factors available:", factors.map((f: any) => f.strategy));
+          if (factors.length > 0) {
+            setSecondFactorStrategy(factors[0].strategy);
+            if (factors[0].strategy === "email_code") {
+              await signIn!.prepareSecondFactor({ strategy: "email_code" });
+            }
             setMode("secondFactor");
             setSecondFactorCode("");
             setLoading(false);
@@ -235,15 +241,11 @@ export default function AuthScreen() {
     setLoading(true);
     setError("");
     try {
+      const strategy = secondFactorStrategy ?? "totp";
       const result = await signIn!.attemptSecondFactor({
-        strategy: "totp",
+        strategy,
         code: secondFactorCode,
-      }).catch(() =>
-        signIn!.attemptSecondFactor({
-          strategy: "phone_code",
-          code: secondFactorCode,
-        })
-      );
+      });
       if (result.status === "complete" && result.createdSessionId && setSignInActive) {
         await setSignInActive({ session: result.createdSessionId });
         router.replace("/(tabs)");
@@ -578,7 +580,9 @@ export default function AuthScreen() {
             </View>
             <Text style={[styles.title, { color: colors.foreground }]}>Two-factor auth</Text>
             <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-              Enter the verification code from your authenticator app
+              {secondFactorStrategy === "email_code"
+                ? `Enter the code sent to ${email}`
+                : "Enter the verification code from your authenticator app"}
             </Text>
           </View>
           <OtpInput value={secondFactorCode} onChange={setSecondFactorCode} onComplete={(c) => { setSecondFactorCode(c); handleSecondFactor(); }} />
