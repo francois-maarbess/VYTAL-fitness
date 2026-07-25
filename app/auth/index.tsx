@@ -101,7 +101,7 @@ export default function AuthScreen() {
     const startFlow = strategy === "apple" ? startAppleOAuth : startGoogleOAuth;
     try {
       const { createdSessionId, setActive } = await startFlow({
-        redirectUrl: `${Platform.select({ web: window.location.origin, default: "mobile" })}/auth/sso-callback`,
+        redirectUrl: Platform.select({ web: `${window.location.origin}/auth/sso-callback`, default: "mobile://auth/sso-callback" }),
       });
       if (createdSessionId && setActive) {
         await setActive({ session: createdSessionId });

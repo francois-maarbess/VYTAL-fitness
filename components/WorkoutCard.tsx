@@ -44,7 +44,7 @@ export function WorkoutCard({ workout, onPress, isToday }: Props) {
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <Text style={[styles.name, { color: colors.foreground }]}>{workout.name}</Text>
-          <Text style={[styles.type, { color: colors.mutedForeground }]}>{workout.type}</Text>
+          <Text style={[styles.type, { color: colors.mutedForeground }]}>{workout.category ?? workout.type}</Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={colors.mutedForeground} />
       </View>

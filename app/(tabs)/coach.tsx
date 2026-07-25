@@ -119,20 +119,14 @@ export default function CoachScreen() {
         throw new Error(`HTTP ${response.status}: ${body.slice(0, 200)}`);
       }
 
-      const raw = await response.text();
-
-      // Buffer-based SSE parser to handle partial lines across chunks
-      let buffer = '';
-      for (const line of raw.split('\n')) {
-        buffer += line;
-        if (!line.endsWith('\n') && raw.split('\n').indexOf(line) < raw.split('\n').length - 1) continue;
-        const trimmed = buffer.trim();
-        buffer = '';
-        if (!trimmed.startsWith('data: ')) continue;
-        const data = trimmed.slice(6).trim();
-        if (data === '[DONE]') continue;
-
-        try {
+      const reader = response.body?.getReader();
+      if (!reader) {
+        const raw = await response.text();
+        for (const line of raw.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data: ')) continue;
+          const data = trimmed.slice(6).trim();
+          if (data === '[DONE]') continue;
           const parsed = JSON.parse(data) as { type?: string; content?: string; plan?: Record<string, unknown> };
           if (parsed.type === 'text' && parsed.content) {
             fullContent += parsed.content;
@@ -151,7 +145,73 @@ export default function CoachScreen() {
             await setWeeklySchedule(parsed.plan as Record<string, Workout>);
             setPlanApplied(true);
           }
-        } catch {}
+        }
+      } else {
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            const data = trimmed.slice(6).trim();
+            if (data === '[DONE]') continue;
+            const parsed = JSON.parse(data) as { type?: string; content?: string; plan?: Record<string, unknown> };
+            if (parsed.type === 'text' && parsed.content) {
+              fullContent += parsed.content;
+              if (!addedAssistant) {
+                setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: fullContent }]);
+                addedAssistant = true;
+              } else {
+                setMessages(prev => {
+                  const updated = [...prev];
+                  const idx = updated.findIndex(m => m.id === assistantId);
+                  if (idx !== -1) updated[idx] = { ...updated[idx], content: fullContent };
+                  return updated;
+                });
+              }
+            } else if (parsed.type === 'workout_plan' && parsed.plan) {
+              await setWeeklySchedule(parsed.plan as Record<string, Workout>);
+              setPlanApplied(true);
+            }
+          }
+        }
+
+        // Decode remaining bytes in case buffer still has data
+        if (buffer.trim()) {
+          const trimmed = buffer.trim();
+          if (trimmed.startsWith('data: ')) {
+            const data = trimmed.slice(6).trim();
+            if (data !== '[DONE]') {
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.type === 'text' && parsed.content) {
+                  fullContent += parsed.content;
+                  if (!addedAssistant) {
+                    setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: fullContent }]);
+                    addedAssistant = true;
+                  } else {
+                    setMessages(prev => {
+                      const updated = [...prev];
+                      const idx = updated.findIndex(m => m.id === assistantId);
+                      if (idx !== -1) updated[idx] = { ...updated[idx], content: fullContent };
+                      return updated;
+                    });
+                  }
+                } else if (parsed.type === 'workout_plan' && parsed.plan) {
+                  await setWeeklySchedule(parsed.plan as Record<string, Workout>);
+                  setPlanApplied(true);
+                }
+              } catch {}
+            }
+          }
+        }
       }
     } catch (err: unknown) {
       if ((err as Error)?.name === 'AbortError') { setIsStreaming(false); setShowTyping(false); return; }

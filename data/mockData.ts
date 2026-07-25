@@ -10,6 +10,7 @@ export interface Workout {
   id: string;
   name: string;
   type: string;
+  category?: 'Strength' | 'Cardio' | 'Sports' | 'Mobility' | 'Outdoor' | 'Recovery';
   duration: number;
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
   exercises: Exercise[];
@@ -53,6 +54,7 @@ export const WORKOUTS: Workout[] = [
     id: 'push-a',
     name: 'Push Day A',
     type: 'Strength',
+    category: 'Strength' as const,
     duration: 50,
     difficulty: 'Intermediate',
     muscleGroups: ['Chest', 'Shoulders', 'Triceps'],
@@ -70,6 +72,7 @@ export const WORKOUTS: Workout[] = [
     id: 'pull-a',
     name: 'Pull Day A',
     type: 'Strength',
+    category: 'Strength' as const,
     duration: 55,
     difficulty: 'Intermediate',
     muscleGroups: ['Back', 'Biceps', 'Rear Delts'],
@@ -87,6 +90,7 @@ export const WORKOUTS: Workout[] = [
     id: 'legs-a',
     name: 'Leg Day A',
     type: 'Strength',
+    category: 'Strength' as const,
     duration: 60,
     difficulty: 'Advanced',
     muscleGroups: ['Quads', 'Hamstrings', 'Glutes', 'Calves'],
@@ -104,6 +108,7 @@ export const WORKOUTS: Workout[] = [
     id: 'hiit-1',
     name: 'HIIT Cardio',
     type: 'Cardio',
+    category: 'Cardio' as const,
     duration: 30,
     difficulty: 'Advanced',
     muscleGroups: ['Full Body'],
@@ -120,6 +125,7 @@ export const WORKOUTS: Workout[] = [
     id: 'core-1',
     name: 'Core & Mobility',
     type: 'Recovery',
+    category: 'Mobility' as const,
     duration: 35,
     difficulty: 'Beginner',
     muscleGroups: ['Core', 'Flexibility'],

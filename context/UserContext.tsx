@@ -1,6 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '@clerk/clerk-expo';
 import { Workout } from '@/data/mockData';
+import { getApiBaseUrl } from '@/lib/api';
 
 const STORAGE_KEY = '@vytal_user_v2';
 
@@ -132,6 +134,7 @@ function calcLevel(xp: number) {
 }
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
+  const { getToken, isSignedIn } = useAuth();
   const [state, setState] = useState<UserState>({
     profile: null,
     fitScore: 0,
@@ -213,6 +216,47 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         }
       })
       .catch(() => setState((prev) => ({ ...prev, isLoading: false })));
+
+    // Sync from server if signed in
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetch(`${getApiBaseUrl()}api/users/profile`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const { user } = await res.json();
+        if (!user) return;
+        setState((prev) => {
+          if (!prev.profile || !user.name) return prev;
+          const serverProfile: UserProfile = {
+            name: user.name ?? prev.profile.name,
+            age: user.age ?? prev.profile.age,
+            weight: user.weight ?? prev.profile.weight,
+            height: user.height ?? prev.profile.height,
+            gender: user.gender ?? prev.profile.gender,
+            goals: user.goals ?? prev.profile.goals,
+            injuries: user.injuries ?? prev.profile.injuries,
+            equipment: user.equipment ?? prev.profile.equipment,
+            stressLevel: user.stress_level ?? prev.profile.stressLevel,
+            activityLevel: user.activity_level ?? prev.profile.activityLevel,
+            onboardingComplete: user.onboarding_complete ? true : prev.profile.onboardingComplete,
+          };
+          const next = {
+            ...prev,
+            profile: serverProfile,
+            fitScore: user.fit_score ?? prev.fitScore,
+            streak: user.streak ?? prev.streak,
+            totalWorkouts: user.total_workouts ?? prev.totalWorkouts,
+            xp: user.xp ?? prev.xp,
+            level: user.level ?? prev.level,
+          };
+          AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch(() => {});
+          return next;
+        });
+      } catch {}
+    })();
   }, []);
 
   const persist = useCallback((updates: Partial<UserState>) => {
@@ -223,9 +267,33 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const syncToServer = useCallback(async (profile?: UserProfile, gamification?: Partial<UserState>) => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const body: Record<string, unknown> = {};
+      if (profile) body.profile = profile;
+      if (gamification) {
+        body.state = {
+          fitScore: gamification.fitScore,
+          streak: gamification.streak,
+          totalWorkouts: gamification.totalWorkouts,
+          xp: gamification.xp,
+          level: gamification.level,
+        };
+      }
+      await fetch(`${getApiBaseUrl()}api/users/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+    } catch {}
+  }, [getToken]);
+
   const setProfile = useCallback(async (profile: UserProfile) => {
     persist({ profile });
-  }, [persist]);
+    syncToServer(profile, undefined);
+  }, [persist, syncToServer]);
 
   const completeWorkout = useCallback(async (calories: number) => {
     setState((prev) => {
@@ -245,9 +313,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         workoutCaloriesToday: prev.workoutCaloriesToday + calories,
       };
       AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ ...prev, ...updated })).catch(() => {});
+      syncToServer(undefined, updated);
       return { ...prev, ...updated };
     });
-  }, []);
+  }, [syncToServer]);
 
   const updateNutrition = useCallback(async (item: { calories: number; protein: number; carbs: number; fat: number }) => {
     setState((prev) => {

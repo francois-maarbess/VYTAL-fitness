@@ -20824,27 +20824,27 @@ var require_router = __commonJS({
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var methods = METHODS.map((method) => method.toLowerCase());
-    module.exports = Router8;
+    module.exports = Router9;
     module.exports.Route = Route;
-    function Router8(options) {
-      if (!(this instanceof Router8)) {
-        return new Router8(options);
+    function Router9(options) {
+      if (!(this instanceof Router9)) {
+        return new Router9(options);
       }
       const opts = options || {};
-      function router8(req, res, next) {
-        router8.handle(req, res, next);
+      function router9(req, res, next) {
+        router9.handle(req, res, next);
       }
-      Object.setPrototypeOf(router8, this);
-      router8.caseSensitive = opts.caseSensitive;
-      router8.mergeParams = opts.mergeParams;
-      router8.params = {};
-      router8.strict = opts.strict;
-      router8.stack = [];
-      return router8;
+      Object.setPrototypeOf(router9, this);
+      router9.caseSensitive = opts.caseSensitive;
+      router9.mergeParams = opts.mergeParams;
+      router9.params = {};
+      router9.strict = opts.strict;
+      router9.stack = [];
+      return router9;
     }
-    Router8.prototype = function() {
+    Router9.prototype = function() {
     };
-    Router8.prototype.param = function param(name, fn) {
+    Router9.prototype.param = function param(name, fn) {
       if (!name) {
         throw new TypeError("argument name is required");
       }
@@ -20864,7 +20864,7 @@ var require_router = __commonJS({
       params.push(fn);
       return this;
     };
-    Router8.prototype.handle = function handle(req, res, callback) {
+    Router9.prototype.handle = function handle(req, res, callback) {
       if (!callback) {
         throw new TypeError("argument callback is required");
       }
@@ -20991,7 +20991,7 @@ var require_router = __commonJS({
         }
       }
     };
-    Router8.prototype.use = function use(handler) {
+    Router9.prototype.use = function use(handler) {
       let offset = 0;
       let path = "/";
       if (typeof handler !== "function") {
@@ -21024,7 +21024,7 @@ var require_router = __commonJS({
       }
       return this;
     };
-    Router8.prototype.route = function route(path) {
+    Router9.prototype.route = function route(path) {
       const route2 = new Route(path);
       const layer = new Layer(path, {
         sensitive: this.caseSensitive,
@@ -21039,7 +21039,7 @@ var require_router = __commonJS({
       return route2;
     };
     methods.concat("all").forEach(function(method) {
-      Router8.prototype[method] = function(path) {
+      Router9.prototype[method] = function(path) {
         const route = this.route(path);
         route[method].apply(route, slice.call(arguments, 1));
         return this;
@@ -21222,13 +21222,13 @@ var require_application = __commonJS({
     var compileTrust = require_utils3().compileTrust;
     var resolve = __require("node:path").resolve;
     var once = require_once();
-    var Router8 = require_router();
+    var Router9 = require_router();
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var app2 = exports = module.exports = {};
     var trustProxyDefaultSymbol = "@@symbol:trust_proxy_default";
     app2.init = function init2() {
-      var router8 = null;
+      var router9 = null;
       this.cache = /* @__PURE__ */ Object.create(null);
       this.engines = /* @__PURE__ */ Object.create(null);
       this.settings = /* @__PURE__ */ Object.create(null);
@@ -21237,13 +21237,13 @@ var require_application = __commonJS({
         configurable: true,
         enumerable: true,
         get: function getrouter() {
-          if (router8 === null) {
-            router8 = new Router8({
+          if (router9 === null) {
+            router9 = new Router9({
               caseSensitive: this.enabled("case sensitive routing"),
               strict: this.enabled("strict routing")
             });
           }
-          return router8;
+          return router9;
         }
       });
     };
@@ -21314,15 +21314,15 @@ var require_application = __commonJS({
       if (fns.length === 0) {
         throw new TypeError("app.use() requires a middleware function");
       }
-      var router8 = this.router;
+      var router9 = this.router;
       fns.forEach(function(fn2) {
         if (!fn2 || !fn2.handle || !fn2.set) {
-          return router8.use(path, fn2);
+          return router9.use(path, fn2);
         }
         debug2(".use app under %s", path);
         fn2.mountpath = path;
         fn2.parent = this;
-        router8.use(path, function mounted_app(req, res, next) {
+        router9.use(path, function mounted_app(req, res, next) {
           var orig = req.app;
           fn2.handle(req, res, function(err) {
             Object.setPrototypeOf(req, orig.request);
@@ -23907,7 +23907,7 @@ var require_express = __commonJS({
     var EventEmitter = __require("node:events").EventEmitter;
     var mixin = require_merge_descriptors();
     var proto = require_application();
-    var Router8 = require_router();
+    var Router9 = require_router();
     var req = require_request();
     var res = require_response();
     exports = module.exports = createApplication;
@@ -23929,8 +23929,8 @@ var require_express = __commonJS({
     exports.application = proto;
     exports.request = req;
     exports.response = res;
-    exports.Route = Router8.Route;
-    exports.Router = Router8;
+    exports.Route = Router9.Route;
+    exports.Router = Router9;
     exports.json = bodyParser.json;
     exports.raw = bodyParser.raw;
     exports.static = require_serve_static();
@@ -30190,8 +30190,8 @@ var require_url_state_machine = __commonJS({
     };
     module.exports.serializeHost = serializeHost;
     module.exports.cannotHaveAUsernamePasswordPort = cannotHaveAUsernamePasswordPort;
-    module.exports.serializeInteger = function(integer3) {
-      return String(integer3);
+    module.exports.serializeInteger = function(integer4) {
+      return String(integer4);
     };
     module.exports.parseURL = function(input, options) {
       if (options === void 0) {
@@ -45541,7 +45541,7 @@ var require_dist5 = __commonJS({
 });
 
 // src/app.ts
-var import_express9 = __toESM(require_express2(), 1);
+var import_express11 = __toESM(require_express2(), 1);
 var import_cors = __toESM(require_lib3(), 1);
 var import_pino_http = __toESM(require_logger(), 1);
 
@@ -55027,7 +55027,7 @@ var requireAuth = (options = {}) => {
 };
 
 // src/routes/index.ts
-var import_express8 = __toESM(require_express2(), 1);
+var import_express10 = __toESM(require_express2(), 1);
 
 // src/routes/health.ts
 var import_express = __toESM(require_express2(), 1);
@@ -65546,7 +65546,32 @@ This ensures the reset happens before new data is added.
 
 If the user says something like "I ate X and also reset my macros", always reset first, then add.
 If intent is ambiguous, do the safer action and ask for confirmation.`;
-var PLAN_KEYWORDS = ["weekly plan", "workout plan", "make me a plan", "create a plan", "schedule for the week", "plan for the week", "training plan", "program for me", "write me a plan", "generate a plan", "build me a plan"];
+var EXERCISE_CATEGORIES = ["Strength", "Cardio", "Sports", "Mobility", "Outdoor"];
+var CATEGORY_DESCRIPTIONS = {
+  Strength: "Weightlifting, resistance training, bodybuilding, powerlifting (bench, squat, deadlift, curls, rows, presses)",
+  Cardio: "Running, cycling, rowing, jump rope, HIIT, stair climber, swimming laps, elliptical",
+  Sports: "Basketball, football, soccer, tennis, boxing, martial arts, volleyball, baseball, golf, rugby, hockey",
+  Mobility: "Yoga, pilates, stretching, foam rolling, dynamic warm-ups, flexibility drills, balance work",
+  Outdoor: "Hiking, walking, trail running, kayaking, rock climbing, paddleboarding, cycling outdoors, skiing"
+};
+var PLAN_KEYWORDS = [
+  "weekly plan",
+  "workout plan",
+  "make me a plan",
+  "create a plan",
+  "schedule for the week",
+  "plan for the week",
+  "training plan",
+  "program for me",
+  "write me a plan",
+  "generate a plan",
+  "build me a plan",
+  ...EXERCISE_CATEGORIES.flatMap((c2) => [
+    `${c2.toLowerCase()} workout`,
+    `${c2.toLowerCase()} routine`,
+    `${c2.toLowerCase()} training`
+  ])
+];
 function wantsPlan(messages2) {
   const last = messages2[messages2.length - 1]?.content?.toLowerCase() ?? "";
   return PLAN_KEYWORDS.some((kw) => last.includes(kw));
@@ -65612,25 +65637,36 @@ Live Daily State:
       const goals = Array.isArray(userProfile?.goals) ? userProfile.goals.join(", ") : "general fitness";
       const equipment = Array.isArray(userProfile?.equipment) ? userProfile.equipment.join(", ") : "full gym";
       const injuries = Array.isArray(userProfile?.injuries) && userProfile.injuries.length ? userProfile.injuries.join(", ") : "none";
+      const userCategory = EXERCISE_CATEGORIES.find(
+        (c2) => messages2[messages2.length - 1]?.content?.toLowerCase().includes(c2.toLowerCase())
+      );
+      const categoryFocus = userCategory ? `The user specifically asked about "${userCategory}" training. Pull exercises from that category and describe them in plan names (e.g., "Basketball Conditioning").` : "Mix categories across the week (Strength, Cardio, Sports, Mobility, Outdoor) to create a balanced program.";
       const planRes = await groq.chat.completions.create({
         model: "llama-3.3-70b-versatile",
         messages: [
           {
             role: "system",
-            content: "You are a fitness expert. Return ONLY valid JSON with no markdown, no code blocks, no extra text."
+            content: `You are a fitness expert. The app has 5 exercise categories:
+${EXERCISE_CATEGORIES.map((c2) => `- ${c2}: ${CATEGORY_DESCRIPTIONS[c2]}`).join("\n")}
+
+Return ONLY valid JSON with no markdown, no code blocks, no extra text.`
           },
           {
             role: "user",
             content: `Create a 7-day workout schedule for someone with goals: ${goals}, equipment: ${equipment}, injuries: ${injuries}.
+${categoryFocus}
+Each day must include a "category" field matching one of: ${EXERCISE_CATEGORIES.join(", ")}.
+Use "Recovery" as category for rest days.
+
 Return this exact JSON structure:
 {
-  "Monday": { "id": "mon", "name": "Push Day", "type": "Strength", "duration": 50, "difficulty": "Intermediate", "muscleGroups": ["Chest", "Shoulders"], "calories": 380, "exercises": [{ "name": "Bench Press", "sets": 4, "reps": "8-10", "rest": 90, "muscleGroup": "Chest" }] },
+  "Monday": { "id": "mon", "name": "Push Day", "category": "Strength", "duration": 50, "difficulty": "Intermediate", "muscleGroups": ["Chest", "Shoulders"], "calories": 380, "exercises": [{ "name": "Bench Press", "sets": 4, "reps": "8-10", "rest": 90, "muscleGroup": "Chest" }] },
   "Tuesday": { ... },
-  "Wednesday": { "id": "wed", "name": "Rest Day", "type": "Recovery", "duration": 0, "difficulty": "Beginner", "muscleGroups": [], "calories": 0, "exercises": [] },
+  "Wednesday": { "id": "wed", "name": "Rest Day", "category": "Recovery", "duration": 0, "difficulty": "Beginner", "muscleGroups": [], "calories": 0, "exercises": [] },
   "Thursday": { ... },
   "Friday": { ... },
   "Saturday": { ... },
-  "Sunday": { "id": "sun", "name": "Rest Day", "type": "Recovery", "duration": 0, "difficulty": "Beginner", "muscleGroups": [], "calories": 0, "exercises": [] }
+  "Sunday": { "id": "sun", "name": "Rest Day", "category": "Recovery", "duration": 0, "difficulty": "Beginner", "muscleGroups": [], "calories": 0, "exercises": [] }
 }`
           }
         ],
@@ -65691,6 +65727,56 @@ Return JSON: {"weeklyPlan":[{"day":"Monday","workoutType":"Push","exercises":[{"
   } catch (err) {
     req.log.error({ err }, "Generate plan error");
     res.status(500).json({ error: "Failed to generate plan" });
+  }
+});
+router2.post("/workouts-by-category", async (req, res) => {
+  try {
+    const { category, goals, equipment, injuries } = req.body;
+    const normalized = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
+    if (!EXERCISE_CATEGORIES.includes(normalized)) {
+      res.status(400).json({
+        error: `Invalid category. Must be one of: ${EXERCISE_CATEGORIES.join(", ")}`
+      });
+      return;
+    }
+    const response = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        {
+          role: "system",
+          content: `You are a fitness expert. The app has 5 exercise categories:
+${EXERCISE_CATEGORIES.map((c2) => `- ${c2}: ${CATEGORY_DESCRIPTIONS[c2]}`).join("\n")}
+
+Return ONLY valid JSON with no markdown, no code blocks, no extra text.`
+        },
+        {
+          role: "user",
+          content: `Generate a "${normalized}" workout for someone with goals: ${goals ?? "general fitness"}, equipment: ${equipment ?? "full gym"}, injuries: ${injuries ?? "none"}.
+
+Return this exact JSON structure (use "Recovery" as category only for rest days):
+{
+  "id": "cat-wod-1",
+  "name": "Basketball Conditioning",
+  "category": "${normalized}",
+  "duration": 45,
+  "difficulty": "Intermediate",
+  "muscleGroups": ["Legs", "Core"],
+  "calories": 400,
+  "exercises": [
+    { "name": "Squat Jumps", "sets": 4, "reps": "12", "rest": 60, "muscleGroup": "Legs" }
+  ]
+}`
+        }
+      ],
+      max_tokens: 1500,
+      temperature: 0.3
+    });
+    const content = response.choices[0]?.message?.content ?? "";
+    const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    res.json(JSON.parse(cleaned));
+  } catch (err) {
+    req.log.error({ err }, "Workouts by category error");
+    res.status(500).json({ error: "Failed to generate workout" });
   }
 });
 var coach_default = router2;
@@ -68487,6 +68573,33 @@ var PgEnumColumn = class extends PgColumn {
     return this.enum.enumName;
   }
 };
+function pgEnum(enumName, input) {
+  return Array.isArray(input) ? pgEnumWithSchema(enumName, [...input], void 0) : pgEnumObjectWithSchema(enumName, input, void 0);
+}
+function pgEnumWithSchema(enumName, values2, schema) {
+  const enumInstance = Object.assign(
+    (name) => new PgEnumColumnBuilder(name ?? "", enumInstance),
+    {
+      enumName,
+      enumValues: values2,
+      schema,
+      [isPgEnumSym]: true
+    }
+  );
+  return enumInstance;
+}
+function pgEnumObjectWithSchema(enumName, values2, schema) {
+  const enumInstance = Object.assign(
+    (name) => new PgEnumObjectColumnBuilder(name ?? "", enumInstance),
+    {
+      enumName,
+      enumValues: Object.values(values2),
+      schema,
+      [isPgEnumSym]: true
+    }
+  );
+  return enumInstance;
+}
 
 // ../../node_modules/.pnpm/drizzle-orm@0.45.2_@types+pg@8.20.0_pg@8.22.0_postgres@3.4.9/node_modules/drizzle-orm/subquery.js
 var Subquery = class {
@@ -74804,12 +74917,20 @@ function drizzle(...params) {
 var schema_exports = {};
 __export(schema_exports, {
   achievements: () => achievements,
+  activityLevelEnum: () => activityLevelEnum,
+  customActivities: () => customActivities,
   dailyMetrics: () => dailyMetrics,
+  exerciseCategoryEnum: () => exerciseCategoryEnum,
+  exercises: () => exercises,
+  genderEnum: () => genderEnum,
   insertAchievementSchema: () => insertAchievementSchema,
+  insertCustomActivitySchema: () => insertCustomActivitySchema,
   insertDailyMetricSchema: () => insertDailyMetricSchema,
+  insertExerciseSchema: () => insertExerciseSchema,
   insertLeaderboardEntrySchema: () => insertLeaderboardEntrySchema,
   insertUserSchema: () => insertUserSchema,
   leaderboardCache: () => leaderboardCache,
+  selectUserSchema: () => selectUserSchema,
   users: () => users
 });
 
@@ -85979,6 +86100,7 @@ function isColumnType(column, columnTypes) {
 function isWithEnum(column) {
   return "enumValues" in column && Array.isArray(column.enumValues) && column.enumValues.length > 0;
 }
+var isPgEnum2 = isWithEnum;
 var literalSchema = external_exports.union([external_exports.string(), external_exports.number(), external_exports.boolean(), external_exports.null()]);
 var jsonSchema = external_exports.union([
   literalSchema,
@@ -86041,11 +86163,11 @@ function numberColumnToSchema(column, z2, coerce) {
   let unsigned = column.getSQLType().includes("unsigned");
   let min;
   let max;
-  let integer3 = false;
+  let integer4 = false;
   if (isColumnType(column, ["MySqlTinyInt", "SingleStoreTinyInt"])) {
     min = unsigned ? 0 : CONSTANTS.INT8_MIN;
     max = unsigned ? CONSTANTS.INT8_UNSIGNED_MAX : CONSTANTS.INT8_MAX;
-    integer3 = true;
+    integer4 = true;
   } else if (isColumnType(column, [
     "PgSmallInt",
     "PgSmallSerial",
@@ -86054,7 +86176,7 @@ function numberColumnToSchema(column, z2, coerce) {
   ])) {
     min = unsigned ? 0 : CONSTANTS.INT16_MIN;
     max = unsigned ? CONSTANTS.INT16_UNSIGNED_MAX : CONSTANTS.INT16_MAX;
-    integer3 = true;
+    integer4 = true;
   } else if (isColumnType(column, [
     "PgReal",
     "MySqlFloat",
@@ -86064,7 +86186,7 @@ function numberColumnToSchema(column, z2, coerce) {
   ])) {
     min = unsigned ? 0 : CONSTANTS.INT24_MIN;
     max = unsigned ? CONSTANTS.INT24_UNSIGNED_MAX : CONSTANTS.INT24_MAX;
-    integer3 = isColumnType(column, ["MySqlMediumInt", "SingleStoreMediumInt"]);
+    integer4 = isColumnType(column, ["MySqlMediumInt", "SingleStoreMediumInt"]);
   } else if (isColumnType(column, [
     "PgInteger",
     "PgSerial",
@@ -86073,7 +86195,7 @@ function numberColumnToSchema(column, z2, coerce) {
   ])) {
     min = unsigned ? 0 : CONSTANTS.INT32_MIN;
     max = unsigned ? CONSTANTS.INT32_UNSIGNED_MAX : CONSTANTS.INT32_MAX;
-    integer3 = true;
+    integer4 = true;
   } else if (isColumnType(column, [
     "PgDoublePrecision",
     "MySqlReal",
@@ -86096,16 +86218,16 @@ function numberColumnToSchema(column, z2, coerce) {
     unsigned = unsigned || isColumnType(column, ["MySqlSerial", "SingleStoreSerial"]);
     min = unsigned ? 0 : Number.MIN_SAFE_INTEGER;
     max = Number.MAX_SAFE_INTEGER;
-    integer3 = true;
+    integer4 = true;
   } else if (isColumnType(column, ["MySqlYear", "SingleStoreYear"])) {
     min = 1901;
     max = 2155;
-    integer3 = true;
+    integer4 = true;
   } else {
     min = Number.MIN_SAFE_INTEGER;
     max = Number.MAX_SAFE_INTEGER;
   }
-  let schema = coerce === true || coerce?.number ? integer3 ? z2.coerce.number() : z2.coerce.number().int() : integer3 ? z2.int() : z2.number();
+  let schema = coerce === true || coerce?.number ? integer4 ? z2.coerce.number() : z2.coerce.number().int() : integer4 ? z2.int() : z2.number();
   schema = schema.gte(min).lte(max);
   return schema;
 }
@@ -86189,10 +86311,26 @@ function handleColumns(columns, refinements, conditions, factory) {
   }
   return external_exports.object(columnSchemas);
 }
+function handleEnum(enum_, factory) {
+  const zod = factory?.zodInstance ?? external_exports;
+  return zod.enum(enum_.enumValues);
+}
+var selectConditions = {
+  never: () => false,
+  optional: () => false,
+  nullable: (column) => !column.notNull
+};
 var insertConditions = {
   never: (column) => column?.generated?.type === "always" || column?.generatedIdentity?.type === "always",
   optional: (column) => !column.notNull || column.notNull && column.hasDefault,
   nullable: (column) => !column.notNull
+};
+var createSelectSchema = (entity, refine2) => {
+  if (isPgEnum2(entity)) {
+    return handleEnum(entity);
+  }
+  const columns = getColumns(entity);
+  return handleColumns(columns, refine2 ?? {}, selectConditions);
 };
 var createInsertSchema = (entity, refine2) => {
   const columns = getColumns(entity);
@@ -86200,16 +86338,38 @@ var createInsertSchema = (entity, refine2) => {
 };
 
 // ../../lib/db/src/schema/users.ts
+var genderEnum = pgEnum("gender", ["male", "female", "other"]);
+var activityLevelEnum = pgEnum("activity_level", ["sedentary", "light", "moderate", "active", "very_active"]);
 var users = pgTable("users", {
   id: text("id").primaryKey(),
   email: text("email").notNull(),
   name: text("name"),
   imageUrl: text("image_url"),
+  // Full onboarding profile
+  age: integer("age"),
+  weight: doublePrecision("weight"),
+  height: doublePrecision("height"),
+  gender: genderEnum("gender"),
+  goals: jsonb("goals").$type().default([]),
+  injuries: jsonb("injuries").$type().default([]),
+  equipment: jsonb("equipment").$type().default([]),
+  stressLevel: integer("stress_level"),
+  activityLevel: activityLevelEnum("activity_level"),
+  onboardingComplete: integer("onboarding_complete").default(0),
+  // 0/1 boolean
+  // Gamification state
+  fitScore: integer("fit_score").default(0),
+  streak: integer("streak").default(0),
+  totalWorkouts: integer("total_workouts").default(0),
+  xp: integer("xp").default(0),
+  level: integer("level").default(1),
+  // Timestamps
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   lastSyncedAt: timestamp("last_synced_at").defaultNow().notNull()
 });
 var insertUserSchema = createInsertSchema(users).omit({ createdAt: true, updatedAt: true, lastSyncedAt: true });
+var selectUserSchema = createSelectSchema(users);
 
 // ../../lib/db/src/schema/dailyMetrics.ts
 var dailyMetrics = pgTable("daily_metrics", {
@@ -86255,6 +86415,40 @@ var leaderboardCache = pgTable("leaderboard_cache", {
   userPeriodIdx: uniqueIndex("leaderboard_user_period_idx").on(table.userId, table.period)
 }));
 var insertLeaderboardEntrySchema = createInsertSchema(leaderboardCache).omit({ id: true, updatedAt: true });
+
+// ../../lib/db/src/schema/exercises.ts
+var exerciseCategoryEnum = pgEnum("exercise_category", [
+  "Strength",
+  "Cardio",
+  "Sports",
+  "Mobility",
+  "Outdoor"
+]);
+var exercises = pgTable("exercises", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  category: exerciseCategoryEnum("category").notNull(),
+  targetMuscle: text("target_muscle").notNull(),
+  equipment: text("equipment").notNull().default("Bodyweight"),
+  estimatedCaloriesPerMinute: real("estimated_calories_per_minute").notNull().default(5)
+}, (table) => ({
+  categoryIdx: uniqueIndex("exercises_category_idx").on(table.category),
+  muscleIdx: uniqueIndex("exercises_muscle_idx").on(table.targetMuscle),
+  nameIdx: uniqueIndex("exercises_name_idx").on(table.name)
+}));
+var insertExerciseSchema = createInsertSchema(exercises).omit({ id: true });
+
+// ../../lib/db/src/schema/customActivities.ts
+var customActivities = pgTable("custom_activities", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  durationMinutes: integer("duration_minutes").notNull(),
+  estimatedCaloriesBurned: integer("estimated_calories_burned").default(0),
+  loggedAt: timestamp("logged_at").defaultNow().notNull(),
+  note: text("note")
+});
+var insertCustomActivitySchema = createInsertSchema(customActivities).omit({ id: true, loggedAt: true });
 
 // ../../lib/db/src/index.ts
 if (!process.env.DATABASE_URL) {
@@ -86848,7 +87042,7 @@ var PgEnumObjectColumn2 = class extends PgColumn2 {
   }
 };
 var isPgEnumSym2 = /* @__PURE__ */ Symbol.for("drizzle:isPgEnum");
-function isPgEnum2(obj) {
+function isPgEnum3(obj) {
   return !!obj && typeof obj === "function" && isPgEnumSym2 in obj && obj[isPgEnumSym2] === true;
 }
 var PgEnumColumnBuilder2 = class extends PgColumnBuilder2 {
@@ -87160,7 +87354,7 @@ var SQL2 = class _SQL {
           new Name2(chunk._.alias)
         ], config2);
       }
-      if (isPgEnum2(chunk)) {
+      if (isPgEnum3(chunk)) {
         if (chunk.schema) {
           return { sql: escapeName2(chunk.schema) + "." + escapeName2(chunk.enumName), params: [] };
         }
@@ -87787,6 +87981,74 @@ router6.get("/", (req, res) => {
 });
 var leaderboard_default = router6;
 
+// src/routes/users.ts
+var import_express7 = __toESM(require_express2(), 1);
+var router7 = (0, import_express7.Router)();
+router7.get("/profile", async (req, res) => {
+  const authId = getAuth(req).userId;
+  if (!authId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  try {
+    const [user] = await db.select().from(users).where(eq2(users.id, authId)).limit(1);
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    res.json({ user });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch user profile");
+    res.status(500).json({ error: "Failed to fetch profile" });
+  }
+});
+router7.put("/profile", async (req, res) => {
+  const authId = getAuth(req).userId;
+  if (!authId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const { profile, state } = req.body;
+  try {
+    const values2 = {
+      id: authId,
+      updatedAt: /* @__PURE__ */ new Date(),
+      lastSyncedAt: /* @__PURE__ */ new Date()
+    };
+    if (profile) {
+      if (profile.name !== void 0) values2.name = profile.name;
+      if (profile.age !== void 0) values2.age = profile.age;
+      if (profile.weight !== void 0) values2.weight = profile.weight;
+      if (profile.height !== void 0) values2.height = profile.height;
+      if (profile.gender !== void 0) values2.gender = profile.gender;
+      if (profile.goals !== void 0) values2.goals = profile.goals;
+      if (profile.injuries !== void 0) values2.injuries = profile.injuries;
+      if (profile.equipment !== void 0) values2.equipment = profile.equipment;
+      if (profile.stressLevel !== void 0) values2.stressLevel = profile.stressLevel;
+      if (profile.activityLevel !== void 0) values2.activityLevel = profile.activityLevel;
+      if (profile.onboardingComplete !== void 0) values2.onboardingComplete = profile.onboardingComplete ? 1 : 0;
+      if (profile.email !== void 0) values2.email = profile.email;
+    }
+    if (state) {
+      if (state.fitScore !== void 0) values2.fitScore = state.fitScore;
+      if (state.streak !== void 0) values2.streak = state.streak;
+      if (state.totalWorkouts !== void 0) values2.totalWorkouts = state.totalWorkouts;
+      if (state.xp !== void 0) values2.xp = state.xp;
+      if (state.level !== void 0) values2.level = state.level;
+    }
+    const [user] = await db.insert(users).values(values2).onConflictDoUpdate({
+      target: users.id,
+      set: values2
+    }).returning();
+    req.log.info({ authId }, "User profile synced");
+    res.json({ user });
+  } catch (err) {
+    req.log.error({ err }, "Failed to upsert user profile");
+    res.status(500).json({ error: "Failed to save profile" });
+  }
+});
+var users_default = router7;
+
 // src/middlewares/auth.ts
 function optionalAuth(req, _res, next) {
   const auth = getAuth(req);
@@ -87797,14 +88059,15 @@ function optionalAuth(req, _res, next) {
 }
 
 // src/routes/index.ts
-var router7 = (0, import_express8.Router)();
-router7.use("/healthz", health_default);
-router7.use("/webhooks", webhooks_default);
-router7.use("/nutrition", optionalAuth, nutrition_default);
-router7.use("/coach", requireAuth(), coach_default);
-router7.use("/achievements", optionalAuth, achievements_default);
-router7.use("/leaderboard", optionalAuth, leaderboard_default);
-var routes_default = router7;
+var router8 = (0, import_express10.Router)();
+router8.use("/healthz", health_default);
+router8.use("/webhooks", webhooks_default);
+router8.use("/nutrition", optionalAuth, nutrition_default);
+router8.use("/coach", requireAuth(), coach_default);
+router8.use("/achievements", optionalAuth, achievements_default);
+router8.use("/leaderboard", optionalAuth, leaderboard_default);
+router8.use("/users", requireAuth(), users_default);
+var routes_default = router8;
 
 // src/lib/logger.ts
 var import_pino = __toESM(require_pino(), 1);
@@ -87825,7 +88088,7 @@ var logger2 = (0, import_pino.default)({
 });
 
 // src/app.ts
-var app = (0, import_express9.default)();
+var app = (0, import_express11.default)();
 app.use(
   (0, import_pino_http.default)({
     logger: logger2,
@@ -87846,10 +88109,10 @@ app.use(
   })
 );
 app.use((0, import_cors.default)());
-app.use(import_express9.default.json({ verify: (req, _res, buf) => {
+app.use(import_express11.default.json({ verify: (req, _res, buf) => {
   req.rawBody = buf.toString();
 } }));
-app.use(import_express9.default.urlencoded({ extended: true }));
+app.use(import_express11.default.urlencoded({ extended: true }));
 app.use(clerkMiddleware());
 app.use("/api", routes_default);
 var app_default = app;

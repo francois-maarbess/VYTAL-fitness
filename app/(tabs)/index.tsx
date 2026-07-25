@@ -18,6 +18,7 @@ import { useColors } from '@/hooks/useColors';
 import { useUser, stepsToCalories } from '@/context/UserContext';
 import { FitScoreRing } from '@/components/FitScoreRing';
 import { WeeklyChart } from '@/components/WeeklyChart';
+import { FitScoreInfoSheet } from '@/components/FitScoreInfoSheet';
 import { StatCard } from '@/components/StatCard';
 import MorningProtocolSheet from '@/components/MorningProtocolSheet';
 import { WORKOUTS } from '@/data/mockData';
@@ -114,6 +115,7 @@ export default function HomeScreen() {
   const [readinessAnimating, setReadinessAnimating] = useState(false);
   const [tipVisible, setTipVisible] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fitScoreInfoVisible, setFitScoreInfoVisible] = useState(false);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -206,7 +208,15 @@ export default function HomeScreen() {
 
         {/* FitScore */}
         <View style={{ alignItems: 'center', paddingVertical: 28 }}>
-          <FitScoreRing score={fitScore} maxScore={1000} size={200} />
+          <View style={{ position: 'relative' }}>
+            <FitScoreRing score={fitScore} maxScore={1000} size={200} />
+            <Pressable
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setFitScoreInfoVisible(true); }}
+              style={{ position: 'absolute', top: -4, right: -4, width: 28, height: 28, borderRadius: 14, backgroundColor: `${colors.primary}20`, borderWidth: 1, borderColor: `${colors.primary}44`, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Ionicons name="information" size={14} color={colors.primary} />
+            </Pressable>
+          </View>
           <Text style={{ color: colors.mutedForeground, fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 10 }}>
             TDEE {tdee} kcal/day
           </Text>
@@ -362,6 +372,7 @@ export default function HomeScreen() {
 
       {showBlur && <BlurView intensity={blurIntensity} tint="dark" style={StyleSheet.absoluteFill} />}
       <MorningProtocolSheet visible={showMorningProtocol} onComplete={handleMorningComplete} onSkip={handleMorningSkip} />
+      <FitScoreInfoSheet visible={fitScoreInfoVisible} onClose={() => setFitScoreInfoVisible(false)} />
     </View>
   );
 }

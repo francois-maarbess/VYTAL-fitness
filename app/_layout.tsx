@@ -18,6 +18,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { ClerkProvider } from '@clerk/clerk-expo';
 import { UserProvider } from '@/context/UserContext';
+import { WorkoutStoreProvider } from '@/stores/workoutStore';
 import { tokenCache } from '@/lib/cache';
 
 SplashScreen.preventAutoHideAsync();
@@ -59,7 +60,9 @@ export default function RootLayout() {
           <QueryClientProvider client={queryClient}>
             <GestureHandlerRootView style={{ flex: 1 }}>
               <UserProvider>
-                <RootLayoutNav />
+                <WorkoutStoreProvider>
+                  <RootLayoutNav />
+                </WorkoutStoreProvider>
               </UserProvider>
             </GestureHandlerRootView>
           </QueryClientProvider>

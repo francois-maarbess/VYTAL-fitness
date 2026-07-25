@@ -12,6 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useUser } from '@/context/UserContext';
 import { WorkoutCard } from '@/components/WorkoutCard';
+import { TodayWorkoutView } from '@/components/TodayWorkoutView';
+import { useWorkoutStore } from '@/stores/workoutStore';
 import { Workout, WORKOUTS } from '@/data/mockData';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -493,18 +495,25 @@ export default function WorkoutScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { weeklySchedule } = useUser();
+  const { startWorkout, endWorkout } = useWorkoutStore();
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
   const [libraryVisible, setLibraryVisible] = useState(false);
   const topPad = Platform.OS === 'web' ? 60 : insets.top;
   const todayIdx = new Date().getDay();
   const todayName = DAY_NAMES[todayIdx];
 
-  const handleStart = useCallback((w: Workout) => {
+  const handleStart = useCallback(async (w: Workout) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    await startWorkout(w);
     setActiveWorkout(w);
-  }, []);
+  }, [startWorkout]);
 
-  if (activeWorkout) return <WorkoutSession workout={activeWorkout} onFinish={() => setActiveWorkout(null)} />;
+  function handleFinishWorkout() {
+    endWorkout();
+    setActiveWorkout(null);
+  }
+
+  if (activeWorkout) return <TodayWorkoutView workout={activeWorkout} onClose={handleFinishWorkout} />;
 
   const displayList: Workout[] = weeklySchedule
     ? Object.entries(weeklySchedule)
