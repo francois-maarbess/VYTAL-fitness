@@ -1,8 +1,22 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Workout } from '@/data/mockData';
+import { Exercise, Workout, WORKOUTS } from '@/data/mockData';
 
 const STORAGE_KEY = '@vytal_user_v2';
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const PLAN_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+export interface WorkoutIntent {
+  sport: string;
+  goal: string;
+}
+
+export interface TodayWorkoutModification {
+  action: 'add' | 'swap' | 'delete';
+  exerciseName?: string;
+  replacementName?: string;
+  reason?: string;
+}
 
 export interface UserProfile {
   name: string;
@@ -62,6 +76,7 @@ export interface UserState {
   xp: number;
   plan: Record<string, unknown> | null;
   weeklySchedule: Record<string, Workout> | null;
+  workoutIntent: WorkoutIntent;
   sleepHours: number;
   sleepQuality: 'poor' | 'fair' | 'good' | 'excellent' | null;
   stepsToday: number;
@@ -79,6 +94,8 @@ interface UserContextType extends UserState {
   updateNutrition: (item: { calories: number; protein: number; carbs: number; fat: number }) => Promise<void>;
   setPlan: (plan: Record<string, unknown>) => Promise<void>;
   setWeeklySchedule: (schedule: Record<string, Workout>) => Promise<void>;
+  setWorkoutIntent: (intent: WorkoutIntent) => Promise<void>;
+  modifyTodaysWorkout: (modification: TodayWorkoutModification) => Promise<void>;
   setSleepHours: (hours: number) => Promise<void>;
   setSleepQuality: (quality: 'poor' | 'fair' | 'good' | 'excellent' | null) => Promise<void>;
   setStepsToday: (steps: number) => Promise<void>;
@@ -87,6 +104,7 @@ interface UserContextType extends UserState {
 }
 
 const defaultNutrition = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+const defaultWorkoutIntent: WorkoutIntent = { sport: 'Bodybuilding', goal: 'Hypertrophy' };
 const defaultProfile: UserProfile = {
   name: '',
   age: 25,
@@ -107,6 +125,60 @@ function calcLevel(xp: number) {
   return Math.floor(xp / 500) + 1;
 }
 
+function fallbackSchedule(): Record<string, Workout> {
+  return PLAN_DAYS.reduce<Record<string, Workout>>((acc, day, index) => {
+    const fallback = WORKOUTS[index % WORKOUTS.length];
+    acc[day] = { ...fallback, id: fallback.id ?? day.toLowerCase().slice(0, 3) };
+    return acc;
+  }, {});
+}
+
+function recalcWorkout(workout: Workout, exercises: Exercise[]): Workout {
+  const muscleGroups = Array.from(new Set(exercises.map((e) => e.muscleGroup).filter(Boolean)));
+  return {
+    ...workout,
+    exercises,
+    muscleGroups,
+    duration: Math.max(exercises.length ? 12 : 0, exercises.reduce((sum, e) => sum + e.sets * 4, 0)),
+    calories: Math.max(exercises.length ? 80 : 0, exercises.reduce((sum, e) => sum + e.sets * 35, 0)),
+  };
+}
+
+function inferMuscleGroup(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.includes('shoulder') || lower.includes('external rotation') || lower.includes('rotator')) return 'Shoulders';
+  if (lower.includes('hip') || lower.includes('glute')) return 'Glutes';
+  if (lower.includes('jump') || lower.includes('squat') || lower.includes('lunge')) return 'Legs';
+  if (lower.includes('plank') || lower.includes('core') || lower.includes('rotation')) return 'Core';
+  if (lower.includes('row') || lower.includes('pull')) return 'Back';
+  if (lower.includes('press') || lower.includes('push')) return 'Chest';
+  return 'Full Body';
+}
+
+function exerciseFromName(name: string): Exercise {
+  const lower = name.toLowerCase();
+  const mobility = lower.includes('stretch') || lower.includes('mobility') || lower.includes('rotation') || lower.includes('external');
+  return {
+    name,
+    sets: mobility ? 2 : 3,
+    reps: mobility ? '12-15 controlled' : '8-12',
+    rest: mobility ? 45 : 60,
+    muscleGroup: inferMuscleGroup(name),
+  };
+}
+
+function findExerciseIndex(exercises: Exercise[], exerciseName?: string): number {
+  if (!exerciseName) return -1;
+  const needle = exerciseName.toLowerCase().trim();
+  if (!needle) return -1;
+  const exact = exercises.findIndex((exercise) => exercise.name.toLowerCase() === needle);
+  if (exact >= 0) return exact;
+  return exercises.findIndex((exercise) => {
+    const haystack = exercise.name.toLowerCase();
+    return haystack.includes(needle) || needle.includes(haystack);
+  });
+}
+
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<UserState>({
     profile: null,
@@ -120,6 +192,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     xp: 0,
     plan: null,
     weeklySchedule: null,
+    workoutIntent: defaultWorkoutIntent,
     sleepHours: 0,
     sleepQuality: null,
     stepsToday: 0,
@@ -215,6 +288,38 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     persist({ weeklySchedule });
   }, [persist]);
 
+  const setWorkoutIntent = useCallback(async (workoutIntent: WorkoutIntent) => {
+    persist({ workoutIntent });
+  }, [persist]);
+
+  const modifyTodaysWorkout = useCallback(async (modification: TodayWorkoutModification) => {
+    setState((prev) => {
+      const todayName = DAY_NAMES[new Date().getDay()];
+      const baseSchedule = prev.weeklySchedule ?? fallbackSchedule();
+      const workout = baseSchedule[todayName] ?? fallbackSchedule()[todayName];
+      const nextExercises = [...workout.exercises];
+      const targetIndex = findExerciseIndex(nextExercises, modification.exerciseName);
+      const replacement = (modification.replacementName ?? modification.exerciseName ?? '').trim();
+
+      if (modification.action === 'delete' && targetIndex >= 0) {
+        nextExercises.splice(targetIndex, 1);
+      } else if (modification.action === 'swap' && replacement) {
+        const swapIndex = targetIndex >= 0 ? targetIndex : 0;
+        nextExercises[swapIndex] = exerciseFromName(replacement);
+      } else if (modification.action === 'add' && replacement) {
+        nextExercises.push(exerciseFromName(replacement));
+      }
+
+      const nextSchedule = {
+        ...baseSchedule,
+        [todayName]: recalcWorkout(workout, nextExercises),
+      };
+      const next = { ...prev, weeklySchedule: nextSchedule };
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
+
   const setSleepHours = useCallback(async (sleepHours: number) => {
     persist({ sleepHours });
   }, [persist]);
@@ -245,6 +350,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       xp: 0,
       plan: null,
       weeklySchedule: null,
+      workoutIntent: defaultWorkoutIntent,
       sleepHours: 0,
       sleepQuality: null,
       stepsToday: 0,
@@ -283,6 +389,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         updateNutrition,
         setPlan,
         setWeeklySchedule,
+        setWorkoutIntent,
+        modifyTodaysWorkout,
         setSleepHours,
         setSleepQuality,
         setStepsToday,

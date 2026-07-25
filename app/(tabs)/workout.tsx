@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
-import { useUser } from '@/context/UserContext';
+import { useUser, type WorkoutIntent } from '@/context/UserContext';
 import { getApiBaseUrl, getAuthHeaders } from '@/lib/api';
 import { Exercise, Workout, WORKOUTS } from '@/data/mockData';
 
@@ -34,6 +34,17 @@ type LibraryExercise = {
 };
 
 type AddTarget = { day: string; replaceIndex?: number };
+
+const INTENT_SPORTS = ['Bodybuilding', 'Basketball', 'Football', 'Tennis', 'Cardio', 'Mobility', 'Recovery'];
+const INTENT_GOALS: Record<string, string[]> = {
+  Bodybuilding: ['Hypertrophy', 'Strength', 'Cutting', 'Weak Point'],
+  Basketball: ['Vertical Jump', 'Agility', 'Conditioning', 'In-Season Maintenance'],
+  Football: ['Power', 'Acceleration', 'Change of Direction', 'Contact Prep'],
+  Tennis: ['Shoulder Health', 'Rotational Power', 'Lateral Speed', 'Match Endurance'],
+  Cardio: ['Zone 2', 'Intervals', 'Fat Loss', 'Endurance'],
+  Mobility: ['Hips', 'Shoulders', 'Spine', 'Full-Body Reset'],
+  Recovery: ['Deload', 'Pain-Free Movement', 'Sleep Support', 'Light Flush'],
+};
 
 const fallbackLibrary: LibraryExercise[] = WORKOUTS.flatMap((workout) =>
   workout.exercises.map((exercise, index) => ({
@@ -296,11 +307,158 @@ const ExerciseRow = memo(function ExerciseRow({
   );
 });
 
+const IntentChip = memo(function IntentChip({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const colors = useColors();
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const handlePress = useCallback(() => {
+    scale.value = withTiming(0.96, { duration: 80 }, () => {
+      scale.value = withTiming(1, { duration: 120 });
+    });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onPress();
+  }, [onPress, scale]);
+
+  return (
+    <Animated.View style={animatedStyle}>
+      <Pressable
+        onPress={handlePress}
+        style={[
+          styles.intentChip,
+          {
+            backgroundColor: selected ? colors.primary : 'rgba(255,255,255,0.05)',
+            borderColor: selected ? colors.primary : 'rgba(255,255,255,0.1)',
+          },
+        ]}
+      >
+        <Text style={{ color: selected ? colors.primaryForeground : colors.foreground, fontFamily: 'Inter_700Bold', fontSize: 12 }} numberOfLines={1}>
+          {label}
+        </Text>
+      </Pressable>
+    </Animated.View>
+  );
+});
+
+function PreWorkoutIntentSheet({
+  sheetRef,
+  value,
+  onChange,
+  onClose,
+}: {
+  sheetRef: React.RefObject<BottomSheet | null>;
+  value: WorkoutIntent;
+  onChange: (intent: WorkoutIntent) => void;
+  onClose: () => void;
+}) {
+  const colors = useColors();
+  const snapPoints = useMemo(() => ['48%', '72%'], []);
+  const goals = INTENT_GOALS[value.sport] ?? INTENT_GOALS.Bodybuilding;
+  const accent = useSharedValue(0);
+  const accentStyle = useAnimatedStyle(() => ({
+    opacity: 0.55 + accent.value * 0.35,
+    transform: [{ translateY: -8 * accent.value }],
+  }));
+
+  useEffect(() => {
+    accent.value = withTiming(1, { duration: 260 }, () => {
+      accent.value = withTiming(0, { duration: 260 });
+    });
+  }, [accent, value.sport, value.goal]);
+
+  const updateSport = useCallback((sport: string) => {
+    const nextGoal = INTENT_GOALS[sport]?.[0] ?? 'Performance';
+    onChange({ sport, goal: nextGoal });
+  }, [onChange]);
+
+  const updateGoal = useCallback((goal: string) => {
+    onChange({ ...value, goal });
+  }, [onChange, value]);
+
+  return (
+    <BottomSheet
+      ref={sheetRef}
+      index={-1}
+      snapPoints={snapPoints}
+      enablePanDownToClose
+      backgroundStyle={{ backgroundColor: colors.card }}
+      handleIndicatorStyle={{ backgroundColor: colors.mutedForeground }}
+      backdropComponent={(props) => <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.5} />}
+    >
+      <BottomSheetView style={styles.intentSheet}>
+        <View style={styles.sheetHeader}>
+          <View style={styles.panelTitleWrap}>
+            <Text style={{ color: colors.foreground, fontFamily: 'Inter_700Bold', fontSize: 21 }}>Workout Intent</Text>
+            <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_400Regular', fontSize: 12 }}>
+              {value.sport} | {value.goal}
+            </Text>
+          </View>
+          <Pressable onPress={onClose} style={[styles.sheetClose, { backgroundColor: colors.muted }]}>
+            <Ionicons name="close" size={18} color={colors.foreground} />
+          </Pressable>
+        </View>
+
+        <Animated.View style={[styles.intentPreview, { borderColor: `${colors.primary}44`, backgroundColor: 'rgba(255,255,255,0.05)' }, accentStyle]}>
+          <Ionicons name="sparkles" size={18} color={colors.primary} />
+          <Text style={{ color: colors.foreground, fontFamily: 'Inter_700Bold', fontSize: 14, flex: 1 }} numberOfLines={1}>
+            {value.sport}: {value.goal}
+          </Text>
+        </Animated.View>
+
+        <View style={styles.intentSection}>
+          <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_700Bold', fontSize: 11, letterSpacing: 1 }}>SPORT / CATEGORY</Text>
+          <FlatList
+            horizontal
+            data={INTENT_SPORTS}
+            keyExtractor={(item) => item}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.intentChipRow}
+            renderItem={({ item }) => (
+              <IntentChip label={item} selected={item === value.sport} onPress={() => updateSport(item)} />
+            )}
+          />
+        </View>
+
+        <View style={styles.intentSection}>
+          <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_700Bold', fontSize: 11, letterSpacing: 1 }}>GOAL</Text>
+          <View style={styles.goalGrid}>
+            {goals.map((goal) => (
+              <IntentChip key={goal} label={goal} selected={goal === value.goal} onPress={() => updateGoal(goal)} />
+            ))}
+          </View>
+        </View>
+
+        <Pressable
+          onPress={() => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            onClose();
+          }}
+          style={({ pressed }) => [styles.intentConfirm, { backgroundColor: colors.primary, opacity: pressed ? 0.86 : 1 }]}
+        >
+          <Ionicons name="checkmark" size={18} color={colors.primaryForeground} />
+          <Text style={{ color: colors.primaryForeground, fontFamily: 'Inter_700Bold', fontSize: 14 }}>Set Intent</Text>
+        </Pressable>
+      </BottomSheetView>
+    </BottomSheet>
+  );
+}
+
 export default function WorkoutScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { weeklySchedule, setWeeklySchedule } = useUser();
+  const { weeklySchedule, setWeeklySchedule, workoutIntent, setWorkoutIntent } = useUser();
   const bottomSheetRef = useRef<BottomSheet>(null);
+  const intentSheetRef = useRef<BottomSheet>(null);
   const searchInputRef = useRef<TextInput>(null);
 
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
@@ -369,6 +527,15 @@ export default function WorkoutScreen() {
   const closeSheet = useCallback(() => {
     bottomSheetRef.current?.close();
     setAddTarget(null);
+  }, []);
+
+  const openIntentSheet = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    intentSheetRef.current?.snapToIndex(0);
+  }, []);
+
+  const closeIntentSheet = useCallback(() => {
+    intentSheetRef.current?.close();
   }, []);
 
   const addLibraryExercise = useCallback(async (item: LibraryExercise) => {
@@ -477,7 +644,18 @@ export default function WorkoutScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.fixedHeader, { paddingTop: topPad + 8, backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-        <Text style={{ color: colors.foreground, fontSize: 28, fontFamily: 'Inter_700Bold' }}>Workout</Text>
+        <View style={styles.titleRow}>
+          <View style={styles.panelTitleWrap}>
+            <Text style={{ color: colors.foreground, fontSize: 28, fontFamily: 'Inter_700Bold' }}>Workout</Text>
+            <Text style={{ color: colors.mutedForeground, fontSize: 12, fontFamily: 'Inter_500Medium' }} numberOfLines={1}>
+              {workoutIntent.sport} | {workoutIntent.goal}
+            </Text>
+          </View>
+          <Pressable onPress={openIntentSheet} style={[styles.intentBtn, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)' }]}>
+            <Ionicons name="options-outline" size={17} color={colors.primary} />
+            <Text style={{ color: colors.primary, fontFamily: 'Inter_700Bold', fontSize: 12 }}>Intent</Text>
+          </Pressable>
+        </View>
         <View style={[styles.segment, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {(['today', 'week'] as const).map((mode) => (
             <Pressable
@@ -606,6 +784,13 @@ export default function WorkoutScreen() {
           />
         </BottomSheetView>
       </BottomSheet>
+
+      <PreWorkoutIntentSheet
+        sheetRef={intentSheetRef}
+        value={workoutIntent}
+        onChange={setWorkoutIntent}
+        onClose={closeIntentSheet}
+      />
     </View>
   );
 }
@@ -613,6 +798,8 @@ export default function WorkoutScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   fixedHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, gap: 12 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  intentBtn: { height: 38, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
   segment: { flexDirection: 'row', borderRadius: 12, borderWidth: 1, padding: 4, minHeight: 46 },
   segmentItem: { flex: 1, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingVertical: 10 },
   workoutPanel: { borderWidth: 1, borderRadius: 16, padding: 14, gap: 14 },
@@ -640,6 +827,13 @@ const styles = StyleSheet.create({
   resultList: { paddingBottom: 28 },
   resultRow: { minHeight: 64, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9 },
   resultIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  intentSheet: { flex: 1, paddingHorizontal: 16, gap: 16 },
+  intentPreview: { minHeight: 48, borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  intentSection: { gap: 10 },
+  intentChipRow: { gap: 8, paddingRight: 16 },
+  intentChip: { minHeight: 36, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 13, borderWidth: 1, justifyContent: 'center' },
+  goalGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  intentConfirm: { height: 48, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 'auto', marginBottom: 8 },
   session: { flex: 1 },
   sessionHeader: { paddingHorizontal: 20, paddingBottom: 12, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   sessionTitleWrap: { alignItems: 'center', flex: 1, paddingHorizontal: 10 },

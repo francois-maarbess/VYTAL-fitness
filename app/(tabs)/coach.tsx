@@ -15,11 +15,11 @@ import { useAuth } from '@clerk/clerk-expo';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
-import { useUser } from '@/context/UserContext';
+import { TodayWorkoutModification, useUser } from '@/context/UserContext';
 import { ChatBubble } from '@/components/ChatBubble';
 import { TypingIndicator } from '@/components/TypingIndicator';
 import { getApiBaseUrl } from '@/lib/api';
-import { Workout } from '@/data/mockData';
+import { Workout, WORKOUTS } from '@/data/mockData';
 
 interface Message {
   id: string;
@@ -43,6 +43,8 @@ const QUICK_PROMPTS = [
   'No-equipment workout',
 ];
 
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 const WELCOME: Message = {
   id: 'welcome',
   role: 'assistant',
@@ -59,7 +61,10 @@ export default function CoachScreen() {
     profile,
     streak,
     totalWorkouts,
+    weeklySchedule,
+    workoutIntent,
     setWeeklySchedule,
+    modifyTodaysWorkout,
     nutritionToday,
     sleepHours,
     sleepQuality,
@@ -78,6 +83,7 @@ export default function CoachScreen() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [showTyping, setShowTyping] = useState(false);
   const [planApplied, setPlanApplied] = useState(false);
+  const [workoutModified, setWorkoutModified] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -114,6 +120,7 @@ export default function CoachScreen() {
 
     setInput('');
     setPlanApplied(false);
+    setWorkoutModified(false);
 
     const userMsg: Message = { id: uid(), role: 'user', content: trimmed };
     const historySnapshot = [...messages.filter(m => m.id !== 'welcome'), userMsg];
@@ -147,6 +154,8 @@ export default function CoachScreen() {
           sleepQuality: sleepQuality ?? 'not rated',
         }
       : undefined;
+    const todayName = DAY_NAMES[new Date().getDay()];
+    const todayWorkout = weeklySchedule?.[todayName] ?? WORKOUTS[new Date().getDay() % WORKOUTS.length];
 
     abortRef.current = new AbortController();
 
@@ -158,7 +167,12 @@ export default function CoachScreen() {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ messages: historySnapshot.map(m => ({ role: m.role, content: m.content })), userProfile }),
+        body: JSON.stringify({
+          messages: historySnapshot.map(m => ({ role: m.role, content: m.content })),
+          userProfile,
+          workoutIntent,
+          todayWorkout,
+        }),
         signal: abortRef.current.signal,
       });
 
@@ -175,7 +189,12 @@ export default function CoachScreen() {
         if (data === '[DONE]') continue;
 
         try {
-          const parsed = JSON.parse(data) as { type?: string; content?: string; plan?: Record<string, Workout> };
+          const parsed = JSON.parse(data) as {
+            type?: string;
+            content?: string;
+            plan?: Record<string, Workout>;
+            modification?: TodayWorkoutModification;
+          };
           if (parsed.type === 'text' && parsed.content) {
             fullContent += parsed.content;
             const cleanContent = fullContent.replace(COMMAND_PATTERN, '').trim();
@@ -189,6 +208,10 @@ export default function CoachScreen() {
           } else if (parsed.type === 'workout_plan' && parsed.plan) {
             await setWeeklySchedule(parsed.plan);
             setPlanApplied(true);
+          } else if (parsed.type === 'workout_modification' && parsed.modification) {
+            await modifyTodaysWorkout(parsed.modification);
+            setWorkoutModified(true);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           }
         } catch {}
       }
@@ -202,7 +225,7 @@ export default function CoachScreen() {
       setIsStreaming(false);
       setShowTyping(false);
     }
-  }, [applyCommands, bmr, getToken, isStreaming, messages, nutritionToday, profile, readinessScore, setWeeklySchedule, sleepHours, sleepQuality, stepsToday, streak, tdee, totalWorkouts]);
+  }, [applyCommands, bmr, getToken, isStreaming, messages, modifyTodaysWorkout, nutritionToday, profile, readinessScore, setWeeklySchedule, sleepHours, sleepQuality, stepsToday, streak, tdee, totalWorkouts, weeklySchedule, workoutIntent]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -229,6 +252,15 @@ export default function CoachScreen() {
           <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
           <Text style={{ color: colors.primary, fontSize: 13, fontFamily: 'Inter_600SemiBold', flex: 1 }}>
             Weekly plan saved to Workout
+          </Text>
+        </View>
+      )}
+
+      {workoutModified && (
+        <View style={[styles.planBanner, { backgroundColor: `${colors.secondary}20`, borderColor: `${colors.secondary}44` }]}>
+          <Ionicons name="sparkles" size={16} color={colors.secondary} />
+          <Text style={{ color: colors.secondary, fontSize: 13, fontFamily: 'Inter_600SemiBold', flex: 1 }}>
+            Today's workout updated
           </Text>
         </View>
       )}
