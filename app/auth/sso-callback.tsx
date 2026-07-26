@@ -2,10 +2,8 @@ import { useSignUp, useSignIn } from "@clerk/clerk-expo";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
-import { useColors } from "@/hooks/useColors";
 
 export default function SSOCallback() {
-  const colors = useColors();
   const { isLoaded: isSignUpLoaded, setActive: setSignUpActive } = useSignUp();
   const { isLoaded: isSignInLoaded, setActive: setSignInActive } = useSignIn();
   const params = useLocalSearchParams<Record<string, string>>();
@@ -24,7 +22,7 @@ export default function SSOCallback() {
           router.replace("/(tabs)");
         }
       } catch {
-        router.replace("/auth");
+        router.replace("/auth" as never);
       }
     };
 
@@ -32,7 +30,7 @@ export default function SSOCallback() {
   }, [isSignUpLoaded, isSignInLoaded]);
 
   return (
-    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background }}>
+    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#0A0A0B" }}>
       <ActivityIndicator size="large" color="#6C63FF" />
     </View>
   );

@@ -12,6 +12,7 @@ import { useColors } from "@/hooks/useColors";
 import OtpInput from "@/components/OtpInput";
 
 type AuthMode = "signIn" | "signUp" | "forgotPassword" | "forgotPasswordOtp" | "forgotPasswordNew" | "secondFactor";
+type SecondFactorStrategy = "phone_code" | "email_code" | "totp" | "backup_code";
 
 function friendlyError(err: unknown): string {
   const msg = (err as Error)?.message ?? "";
@@ -76,7 +77,7 @@ export default function AuthScreen() {
   const [resendTimer, setResendTimer] = useState(0);
   const [forgotEmailSent, setForgotEmailSent] = useState(false);
   const [secondFactorCode, setSecondFactorCode] = useState("");
-  const [secondFactorStrategy, setSecondFactorStrategy] = useState<string | null>(null);
+  const [secondFactorStrategy, setSecondFactorStrategy] = useState<SecondFactorStrategy | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   const { signIn, setActive: setSignInActive, isLoaded: signInLoaded } = useSignIn();
@@ -136,7 +137,7 @@ export default function AuthScreen() {
           const factors = result.supportedSecondFactors ?? [];
           console.log("[Auth] second factors available:", factors.map((f: any) => f.strategy));
           if (factors.length > 0) {
-            setSecondFactorStrategy(factors[0].strategy);
+            setSecondFactorStrategy(factors[0].strategy as SecondFactorStrategy);
             if (factors[0].strategy === "email_code") {
               await signIn!.prepareSecondFactor({ strategy: "email_code" });
             }

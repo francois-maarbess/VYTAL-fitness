@@ -9,7 +9,7 @@ interface TieredAchievement {
   description: string;
   icon: keyof typeof Ionicons.glyphMap;
   iconColor: string;
-  tier: "bronze" | "silver" | "gold" | null;
+  tier?: "bronze" | "silver" | "gold" | null;
   unlocked: boolean;
   progress: number;
   total: number;

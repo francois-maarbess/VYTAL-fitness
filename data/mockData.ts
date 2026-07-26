@@ -10,6 +10,7 @@ export interface Workout {
   id: string;
   name: string;
   type: string;
+  category?: string;
   duration: number;
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
   exercises: Exercise[];
@@ -23,7 +24,7 @@ export interface LeaderboardEntry {
   avatar: string;
   fitScore: number;
   streak: number;
-  isCurrentUser?: boolean;
+  isCurrentUser: boolean;
 }
 
 export interface Achievement {
@@ -32,6 +33,7 @@ export interface Achievement {
   description: string;
   icon: keyof typeof import('@expo/vector-icons').Ionicons.glyphMap;
   iconColor: string;
+  tier?: 'bronze' | 'silver' | 'gold' | null;
   unlocked: boolean;
   progress: number;
   total: number;
@@ -136,16 +138,16 @@ export const WORKOUTS: Workout[] = [
 ];
 
 export const LEADERBOARD: LeaderboardEntry[] = [
-  { rank: 1, name: 'Marcus Chen', avatar: 'MC', fitScore: 9842, streak: 127 },
-  { rank: 2, name: 'Aria Patel', avatar: 'AP', fitScore: 9710, streak: 98 },
-  { rank: 3, name: 'Jake Morrison', avatar: 'JM', fitScore: 9580, streak: 84 },
-  { rank: 4, name: 'Sofia Reyes', avatar: 'SR', fitScore: 9420, streak: 76 },
-  { rank: 5, name: 'Devon Kim', avatar: 'DK', fitScore: 9105, streak: 71 },
-  { rank: 6, name: 'Luna Torres', avatar: 'LT', fitScore: 8860, streak: 63 },
-  { rank: 7, name: 'Noah Williams', avatar: 'NW', fitScore: 8720, streak: 58 },
-  { rank: 8, name: 'Zoe Huang', avatar: 'ZH', fitScore: 8540, streak: 52 },
+  { rank: 1, name: 'Marcus Chen', avatar: 'MC', fitScore: 9842, streak: 127, isCurrentUser: false },
+  { rank: 2, name: 'Aria Patel', avatar: 'AP', fitScore: 9710, streak: 98, isCurrentUser: false },
+  { rank: 3, name: 'Jake Morrison', avatar: 'JM', fitScore: 9580, streak: 84, isCurrentUser: false },
+  { rank: 4, name: 'Sofia Reyes', avatar: 'SR', fitScore: 9420, streak: 76, isCurrentUser: false },
+  { rank: 5, name: 'Devon Kim', avatar: 'DK', fitScore: 9105, streak: 71, isCurrentUser: false },
+  { rank: 6, name: 'Luna Torres', avatar: 'LT', fitScore: 8860, streak: 63, isCurrentUser: false },
+  { rank: 7, name: 'Noah Williams', avatar: 'NW', fitScore: 8720, streak: 58, isCurrentUser: false },
+  { rank: 8, name: 'Zoe Huang', avatar: 'ZH', fitScore: 8540, streak: 52, isCurrentUser: false },
   { rank: 9, name: 'You', avatar: 'ME', fitScore: 0, streak: 0, isCurrentUser: true },
-  { rank: 10, name: 'Tyler Brooks', avatar: 'TB', fitScore: 7880, streak: 41 },
+  { rank: 10, name: 'Tyler Brooks', avatar: 'TB', fitScore: 7880, streak: 41, isCurrentUser: false },
 ];
 
 export const ACHIEVEMENTS: Achievement[] = [

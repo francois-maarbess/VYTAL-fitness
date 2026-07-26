@@ -489,8 +489,7 @@ export default function WorkoutScreen() {
         if (query.trim()) params.set('q', query.trim());
         if (category !== 'All') params.set('category', category);
         params.set('limit', '60');
-        const headers = await getAuthHeaders();
-        const res = await fetch(`${getApiBaseUrl()}api/exercises?${params.toString()}`, { headers });
+        const res = await fetch(`${getApiBaseUrl()}api/exercises?${params.toString()}`, getAuthHeaders());
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json() as { exercises?: LibraryExercise[] };
         if (alive) setResults(data.exercises?.length ? data.exercises : fallbackLibrary);
@@ -506,15 +505,13 @@ export default function WorkoutScreen() {
     };
   }, [category, query]);
 
-  const persistSchedule = useCallback(async (next: Record<string, Workout>) => {
-    setSchedule(next);
-    await setWeeklySchedule(next);
-  }, [setWeeklySchedule]);
-
   const updateDay = useCallback(async (day: string, updater: (workout: Workout) => Workout) => {
-    const next = { ...schedule, [day]: updater(schedule[day] ?? normalizeWorkout(day)) };
-    await persistSchedule(next);
-  }, [persistSchedule, schedule]);
+    setSchedule((current) => {
+      const next = { ...current, [day]: updater(current[day] ?? normalizeWorkout(day)) };
+      void setWeeklySchedule(next);
+      return next;
+    });
+  }, [setWeeklySchedule]);
 
   const openAddSheet = useCallback((target: AddTarget) => {
     setAddTarget(target);

@@ -1,3 +1,10 @@
+import { Platform } from "react-native";
+
+const DEV_API_HOST = Platform.select({
+  android: "10.0.2.2",
+  default: "localhost",
+});
+
 export function getApiBaseUrl(): string {
   const apiUrl = process.env.EXPO_PUBLIC_API_URL;
   if (apiUrl) {
@@ -7,9 +14,10 @@ export function getApiBaseUrl(): string {
   if (domain) {
     return `https://${domain}/`;
   }
-  return 'http://192.168.1.7:8080/';
+  return `http://${DEV_API_HOST}:8080/`;
 }
 
-export async function getAuthHeaders(): Promise<Record<string, string>> {
+export function getAuthHeaders(token?: string | null): Record<string, string> {
+  if (token) return { Authorization: `Bearer ${token}` };
   return {};
 }

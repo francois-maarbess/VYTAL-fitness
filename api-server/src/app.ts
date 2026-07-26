@@ -30,7 +30,14 @@ app.use(cors());
 app.use(express.json({ verify: (req, _res, buf) => { (req as unknown as Record<string, unknown>).rawBody = buf.toString(); } }));
 app.use(express.urlencoded({ extended: true }));
 
-app.use(clerkMiddleware());
+const SKIP_AUTH = ["/api/healthz"];
+
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const pubKey = process.env["CLERK_PUBLISHABLE_KEY"] || process.env["EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY"];
+  if (!process.env["CLERK_SECRET_KEY"] || !pubKey) return next();
+  if (SKIP_AUTH.some((p) => req.path.startsWith(p))) return next();
+  clerkMiddleware()(req, res, next);
+});
 
 app.use("/api", router);
 
