@@ -489,7 +489,7 @@ export default function WorkoutScreen() {
         if (query.trim()) params.set('q', query.trim());
         if (category !== 'All') params.set('category', category);
         params.set('limit', '60');
-        const res = await fetch(`${getApiBaseUrl()}api/exercises?${params.toString()}`, getAuthHeaders());
+        const res = await fetch(`${getApiBaseUrl()}api/exercises?${params.toString()}`, { headers: getAuthHeaders() });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json() as { exercises?: LibraryExercise[] };
         if (alive) setResults(data.exercises?.length ? data.exercises : fallbackLibrary);
