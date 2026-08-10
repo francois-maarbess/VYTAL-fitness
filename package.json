@@ -10,6 +10,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build": "node scripts/build.js",
+    "build:web": "expo export --platform web --output-dir dist",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "serve": "node server/serve.js"
   },
