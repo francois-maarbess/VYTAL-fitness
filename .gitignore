@@ -40,3 +40,5 @@ android/build/
 
 # Dev scripts
 start-api.bat
+# Local Netlify folder
+.netlify
