@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
-import { db, users, type InsertUser } from "@workspace/db";
+import { db, users, type InsertUser } from "../../../lib/db/src/index.ts";
 
 const router = Router();
 

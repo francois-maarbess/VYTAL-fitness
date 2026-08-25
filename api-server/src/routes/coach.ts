@@ -1,6 +1,12 @@
 import { Router } from "express";
 import OpenAI from "openai";
 import { coachChatLimiter, coachPlanLimiter } from "../middlewares/rateLimit";
+import {
+  CoachChatSchema,
+  GeneratePlanSchema,
+  WorkoutsByCategorySchema,
+  sanitizeAIResponse,
+} from "../lib/validation";
 
 const router = Router();
 
@@ -310,17 +316,12 @@ Live Daily State:
 
 router.post("/chat", coachChatLimiter, async (req, res) => {
   try {
-    const { messages, userProfile, workoutIntent, todayWorkout } = req.body as {
-      messages: { role: string; content: string }[];
-      userProfile?: Record<string, unknown>;
-      workoutIntent?: Record<string, unknown>;
-      todayWorkout?: Record<string, unknown>;
-    };
-
-    if (!messages || !Array.isArray(messages)) {
-      res.status(400).json({ error: "messages array is required" });
+    const parsed = CoachChatSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid request", details: parsed.error.flatten().fieldErrors });
       return;
     }
+    const { messages, userProfile, workoutIntent, todayWorkout } = parsed.data;
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -433,11 +434,12 @@ Return this exact JSON structure:
 
 router.post("/generate-plan", coachPlanLimiter, async (req, res) => {
   try {
-    const { profile } = req.body as { profile: Record<string, unknown> };
-    if (!profile) {
-      res.status(400).json({ error: "profile is required" });
+    const parsed = GeneratePlanSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid request", details: parsed.error.flatten().fieldErrors });
       return;
     }
+    const { profile } = parsed.data;
 
     const response = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",
@@ -465,12 +467,12 @@ Return JSON: {"weeklyPlan":[{"day":"Monday","workoutType":"Push","exercises":[{"
 
 router.post("/workouts-by-category", coachPlanLimiter, async (req, res) => {
   try {
-    const { category, goals, equipment, injuries } = req.body as {
-      category: string;
-      goals?: string;
-      equipment?: string;
-      injuries?: string;
-    };
+    const parsed = WorkoutsByCategorySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten().fieldErrors.category?.[0] ?? "Invalid request" });
+      return;
+    }
+    const { category, goals, equipment, injuries } = parsed.data;
 
     const normalized = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
     const matched = EXERCISE_CATEGORIES.find((c) => c.toLowerCase() === normalized.toLowerCase());

@@ -1,7 +1,8 @@
 import { Router } from "express";
 import OpenAI from "openai";
-import { db, dailyMetrics } from "@workspace/db";
+import { db, dailyMetrics } from "../../../lib/db/src/index.ts";
 import { eq, and, sql } from "drizzle-orm";
+import { NutritionAnalyzeSchema } from "../lib/validation";
 
 const router = Router();
 
@@ -137,15 +138,16 @@ router.post("/analyze", async (req, res) => {
   const startTime = Date.now();
 
   try {
-    const { text } = req.body as { text: string };
-    if (!text?.trim()) {
+    const parsed = NutritionAnalyzeSchema.safeParse(req.body);
+    if (!parsed.success) {
       res.status(400).json({
         isValidFood: false, foodSummary: null, items: [],
         macros: { calories: 0, protein: 0, carbs: 0, fat: 0 },
-        message: "Please describe what you ate.",
+        message: parsed.error.flatten().fieldErrors.text?.[0] ?? "Please describe what you ate.",
       });
       return;
     }
+    const { text } = parsed.data;
 
     // Step 1: Groq food recognition + macro estimation
     const extraction = await groq.chat.completions.create({

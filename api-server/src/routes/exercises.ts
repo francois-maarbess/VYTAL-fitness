@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
-import { db, exercises, insertExerciseSchema } from "@workspace/db";
+import { db, exercises, insertExerciseSchema } from "../../../lib/db/src/index.ts";
 
 const router = Router();
 

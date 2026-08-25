@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { Webhook } from "svix";
-import { db, users } from "@workspace/db";
+import { db, users } from "../../../lib/db/src/index.ts";
 import { eq } from "drizzle-orm";
 import { webhookLimiter } from "../middlewares/rateLimit";
 

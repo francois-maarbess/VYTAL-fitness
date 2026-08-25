@@ -1,15 +1,4 @@
 import { build } from "esbuild";
-import { fileURLToPath } from "url";
-
-const workspaceDbPlugin = {
-  name: "workspace-db-alias",
-  setup(builder) {
-    builder.onResolve({ filter: /^@workspace\/db$/ }, () => {
-      const p = fileURLToPath(new URL("../lib/db/src/index.ts", import.meta.url));
-      return { path: p };
-    });
-  },
-};
 
 const nodeBuiltins = new Set([
   "assert", "buffer", "child_process", "cluster", "console", "constants",
@@ -28,7 +17,6 @@ await build({
   format: "esm",
   sourcemap: true,
   packages: "external",
-  plugins: [workspaceDbPlugin],
   external: ["pino-pretty"],
   logLevel: "info",
 });
