@@ -16,22 +16,12 @@ import * as Haptics from '@/lib/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useUser, type WorkoutIntent } from '@/context/UserContext';
-import { getApiBaseUrl, getAuthHeaders } from '@/lib/api';
+import { useExerciseSearch, type LibraryExercise } from '@/hooks/useApi';
 import { Exercise, Workout, WORKOUTS } from '@/data/mockData';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const PLAN_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const CATEGORY_FILTERS = ['All', 'Bodybuilding', 'Calisthenics', 'Basketball', 'Football', 'Tennis', 'Cardio', 'Mobility'];
-
-type LibraryExercise = {
-  id: number | string;
-  name: string;
-  category: string;
-  targetMuscle: string;
-  equipment: string;
-  primaryMuscles?: string[];
-  estimatedCaloriesPerMinute?: number;
-};
 
 type AddTarget = { day: string; replaceIndex?: number };
 
@@ -467,9 +457,17 @@ export default function WorkoutScreen() {
   const [addTarget, setAddTarget] = useState<AddTarget | null>(null);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
-  const [results, setResults] = useState<LibraryExercise[]>(fallbackLibrary);
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [customName, setCustomName] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
+  const searchQuery = useExerciseSearch(debouncedQuery, category, true);
+  const results = searchQuery.data?.length ? searchQuery.data : fallbackLibrary;
+  const isSearching = searchQuery.isFetching;
+
+  // Debounce the search query
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 220);
+    return () => clearTimeout(timer);
+  }, [query]);
 
   const topPad = Platform.OS === 'web' ? 60 : insets.top;
   const todayName = DAY_NAMES[new Date().getDay()];
@@ -479,31 +477,6 @@ export default function WorkoutScreen() {
   useEffect(() => {
     setSchedule(buildSchedule(weeklySchedule));
   }, [weeklySchedule]);
-
-  useEffect(() => {
-    let alive = true;
-    const timer = setTimeout(async () => {
-      setIsSearching(true);
-      try {
-        const params = new URLSearchParams();
-        if (query.trim()) params.set('q', query.trim());
-        if (category !== 'All') params.set('category', category);
-        params.set('limit', '60');
-        const res = await fetch(`${getApiBaseUrl()}api/exercises?${params.toString()}`, { headers: getAuthHeaders() });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json() as { exercises?: LibraryExercise[] };
-        if (alive) setResults(data.exercises?.length ? data.exercises : fallbackLibrary);
-      } catch {
-        if (alive) setResults(fallbackLibrary);
-      } finally {
-        if (alive) setIsSearching(false);
-      }
-    }, 220);
-    return () => {
-      alive = false;
-      clearTimeout(timer);
-    };
-  }, [category, query]);
 
   const updateDay = useCallback(async (day: string, updater: (workout: Workout) => Workout) => {
     setSchedule((current) => {

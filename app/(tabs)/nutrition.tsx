@@ -19,9 +19,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@clerk/clerk-expo';
 import { useColors } from '@/hooks/useColors';
 import { useUser } from '@/context/UserContext';
+import { useNutritionAnalyze, type NutritionResult } from '@/hooks/useApi';
 import { MacroBar } from '@/components/MacroBar';
 import { Meal } from '@/data/mockData';
-import { getApiBaseUrl } from '@/lib/api';
 
 interface NutritionResult {
   isValidFood: boolean;
@@ -69,23 +69,14 @@ function NLPModal({ visible, onClose, onConfirm, getToken }: {
 }) {
   const colors = useColors();
   const [text, setText] = useState('');
-  const [loading, setLoading] = useState(false);
+  const analyzeMutation = useNutritionAnalyze();
 
   async function analyze() {
     if (!text.trim()) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setLoading(true);
     try {
       const token = await getToken();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch(`${getApiBaseUrl()}api/nutrition/analyze`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ text: text.trim() }),
-      });
-      const data: NutritionResult = await res.json();
+      const data = await analyzeMutation.mutateAsync({ text: text.trim(), token });
       if (!data.isValidFood) {
         Alert.alert("Hold up!", data.message || "Please enter a valid food item.");
         return;
@@ -95,14 +86,12 @@ function NLPModal({ visible, onClose, onConfirm, getToken }: {
       handleClose();
     } catch (e: unknown) {
       Alert.alert("Network Error", "Could not reach the VYTAL AI. Please check your connection.");
-    } finally {
-      setLoading(false);
     }
   }
 
   function handleClose() {
     setText('');
-    setLoading(false);
+    analyzeMutation.reset();
     onClose();
   }
 
@@ -136,12 +125,12 @@ function NLPModal({ visible, onClose, onConfirm, getToken }: {
             />
           </View>
 
-          <Pressable onPress={analyze} disabled={!text.trim() || loading}
-            style={[styles.analyzeBtn, { backgroundColor: text.trim() && !loading ? colors.primary : colors.muted }]}
+          <Pressable onPress={analyze} disabled={!text.trim() || analyzeMutation.isPending}
+            style={[styles.analyzeBtn, { backgroundColor: text.trim() && !analyzeMutation.isPending ? colors.primary : colors.muted }]}
           >
-            {loading ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Ionicons name="flash" size={16} color={text.trim() ? colors.primaryForeground : colors.mutedForeground} />}
-            <Text style={{ color: text.trim() && !loading ? colors.primaryForeground : colors.mutedForeground, fontFamily: 'Inter_600SemiBold', fontSize: 15 }}>
-              {loading ? 'Analysing...' : 'Analyse with AI'}
+            {analyzeMutation.isPending ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Ionicons name="flash" size={16} color={text.trim() ? colors.primaryForeground : colors.mutedForeground} />}
+            <Text style={{ color: text.trim() && !analyzeMutation.isPending ? colors.primaryForeground : colors.mutedForeground, fontFamily: 'Inter_600SemiBold', fontSize: 15 }}>
+              {analyzeMutation.isPending ? 'Analysing...' : 'Analyse with AI'}
             </Text>
           </Pressable>
         </View>

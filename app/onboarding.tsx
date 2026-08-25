@@ -17,7 +17,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useUser, UserProfile } from '@/context/UserContext';
-import { getApiBaseUrl } from '@/lib/api';
+import { useGeneratePlan } from '@/hooks/useApi';
 
 const GOALS = ['Lose Weight', 'Build Muscle', 'Improve Endurance', 'Boost Energy', 'Longevity', 'Stress Relief'];
 const INJURIES = ['None', 'Lower Back', 'Knee Issues', 'Shoulder Issues', 'Hip Problems', 'Wrist Pain'];
@@ -91,6 +91,7 @@ export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile, setProfile, setPlan } = useUser();
+  const generatePlan = useGeneratePlan();
 
   const [mode, setMode] = useState<'welcome' | 'signin' | 'signup'>('welcome');
   const [step, setStep] = useState(0);
@@ -139,12 +140,8 @@ export default function OnboardingScreen() {
     };
     await setProfile(p);
     try {
-      const res = await fetch(`${getApiBaseUrl()}api/coach/generate-plan`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile: p }),
-      });
-      if (res.ok) { const plan = await res.json(); await setPlan(plan); }
+      const plan = await generatePlan.mutateAsync({ profile: p as unknown as Record<string, unknown> });
+      await setPlan(plan);
     } catch {}
     setGenerating(false);
     router.replace('/(tabs)');

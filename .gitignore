@@ -18,10 +18,10 @@ dist-web/
 expo-env.d.ts
 # @end expo-cli
 
-# Secrets
+# Secrets — never commit real .env files
 .env
-.env.local
-.env.production
+.env.*
+!.env.example
 
 # OS
 .DS_Store

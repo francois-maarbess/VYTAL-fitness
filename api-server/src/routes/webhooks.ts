@@ -2,10 +2,11 @@ import { Router } from "express";
 import { Webhook } from "svix";
 import { db, users } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { webhookLimiter } from "../middlewares/rateLimit";
 
 const router = Router();
 
-router.post("/clerk", async (req, res) => {
+router.post("/clerk", webhookLimiter, async (req, res) => {
   const svixId = req.headers["svix-id"] as string;
   const svixTimestamp = req.headers["svix-timestamp"] as string;
   const svixSignature = req.headers["svix-signature"] as string;

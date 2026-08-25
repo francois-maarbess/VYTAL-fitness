@@ -1,5 +1,6 @@
 import { Router } from "express";
 import OpenAI from "openai";
+import { coachChatLimiter, coachPlanLimiter } from "../middlewares/rateLimit";
 
 const router = Router();
 
@@ -307,7 +308,7 @@ Live Daily State:
 - BMR: ${userProfile.bmr ?? 0} kcal`;
 }
 
-router.post("/chat", async (req, res) => {
+router.post("/chat", coachChatLimiter, async (req, res) => {
   try {
     const { messages, userProfile, workoutIntent, todayWorkout } = req.body as {
       messages: { role: string; content: string }[];
@@ -430,7 +431,7 @@ Return this exact JSON structure:
   }
 });
 
-router.post("/generate-plan", async (req, res) => {
+router.post("/generate-plan", coachPlanLimiter, async (req, res) => {
   try {
     const { profile } = req.body as { profile: Record<string, unknown> };
     if (!profile) {
@@ -462,7 +463,7 @@ Return JSON: {"weeklyPlan":[{"day":"Monday","workoutType":"Push","exercises":[{"
   }
 });
 
-router.post("/workouts-by-category", async (req, res) => {
+router.post("/workouts-by-category", coachPlanLimiter, async (req, res) => {
   try {
     const { category, goals, equipment, injuries } = req.body as {
       category: string;
